@@ -1,46 +1,28 @@
 // ==========================================
 // FIREBASE CONFIGURATION - Peachy Pals Playland
 // ==========================================
-// SETUP INSTRUCTIONS:
-// 1. Go to https://console.firebase.google.com
-// 2. Select your existing Firebase project
-// 3. Go to Project Settings > General
-// 4. Scroll to "Your apps" > click web icon (</>)
-// 5. Register app, copy config values below
-// 6. Enable Cloud Firestore in Firebase console
-// 7. Set Firestore rules (see below)
+// BACKEND: Firebase Realtime Database
 //
-// FIRESTORE RULES (paste in Firebase Console > Firestore > Rules):
-// ---------------------------------------------------------------
-// rules_version = '2';
-// service cloud.firestore {
-//   match /databases/{database}/documents {
-//     match /bookings/{bookingId} {
-//       allow read, write: if true;
-//     }
-//     match /packages/{packageId} {
-//       allow read: if true;
-//       allow write: if true;
-//     }
-//     match /blockedDates/{dateId} {
-//       allow read: if true;
-//       allow write: if true;
-//     }
-//     match /settings/{settingId} {
-//       allow read: if true;
-//       allow write: if true;
-//     }
+// RTDB RULES (paste in Firebase Console > Realtime Database > Rules):
+// -------------------------------------------------------------------
+// {
+//   "rules": {
+//     "bookings": { ".read": true, ".write": true },
+//     "packages": { ".read": true, ".write": true },
+//     "blockedDates": { ".read": true, ".write": true }
 //   }
 // }
 // ==========================================
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCo4nZPAjeBXsFeaxJbDZWoQlP4CJcWs34",
+  authDomain: "project-e0e63e59-c7f9-4e5b-b6f.firebaseapp.com",
+  databaseURL: "https://project-e0e63e59-c7f9-4e5b-b6f-default-rtdb.firebaseio.com",
+  projectId: "project-e0e63e59-c7f9-4e5b-b6f",
+  storageBucket: "project-e0e63e59-c7f9-4e5b-b6f.firebasestorage.app",
+  messagingSenderId: "226814066018",
+  appId: "1:226814066018:web:e932a7ac8954943aca003b",
+  measurementId: "G-Y2JJTL5E9Y"
 };
 
 // Initialize Firebase
@@ -48,14 +30,10 @@ let db;
 let isFirebaseConfigured = false;
 
 try {
-  if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
-    firebase.initializeApp(firebaseConfig);
-    db = firebase.firestore();
-    isFirebaseConfigured = true;
-    console.log("✅ Firebase connected successfully");
-  } else {
-    console.warn("⚠️ Firebase not configured — using localStorage fallback. Update js/firebase-config.js with your Firebase project credentials.");
-  }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+  isFirebaseConfigured = true;
+  console.log("✅ Firebase Realtime Database connected");
 } catch (e) {
   console.error("❌ Firebase initialization failed:", e);
   console.warn("⚠️ Falling back to localStorage.");
@@ -63,27 +41,45 @@ try {
 
 // ==========================================
 // DATA STORE ABSTRACTION
-// Automatically uses Firebase or localStorage
+// Uses Firebase RTDB with localStorage fallback
 // ==========================================
 const DataStore = {
+
+  // ---- helpers ----
+  _ref(path) { return db.ref(path); },
+
+  // Convert RTDB snapshot to array with IDs
+  _snapToArray(snap) {
+    const arr = [];
+    snap.forEach(child => {
+      arr.push({ id: child.key, ...child.val() });
+    });
+    return arr;
+  },
 
   // --- PACKAGES ---
   async getPackages() {
     if (isFirebaseConfigured) {
-      const snap = await db.collection('packages').orderBy('sortOrder').get();
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await this._ref('packages').orderByChild('sortOrder').once('value');
+      return this._snapToArray(snap);
     }
     return JSON.parse(localStorage.getItem('pp_packages') || '[]');
   },
 
   async savePackage(pkg) {
     if (isFirebaseConfigured) {
-      if (pkg.id) {
-        await db.collection('packages').doc(pkg.id).set(pkg, { merge: true });
-        return pkg.id;
+      if (pkg.id && !pkg.id.startsWith('pkg_')) {
+        const id = pkg.id;
+        const data = { ...pkg };
+        delete data.id;
+        await this._ref('packages/' + id).set(data);
+        return id;
       }
-      const ref = await db.collection('packages').add(pkg);
-      return ref.id;
+      const data = { ...pkg };
+      delete data.id;
+      const ref = this._ref('packages').push();
+      await ref.set(data);
+      return ref.key;
     }
     const packages = JSON.parse(localStorage.getItem('pp_packages') || '[]');
     if (pkg.id) {
@@ -99,7 +95,7 @@ const DataStore = {
 
   async deletePackage(id) {
     if (isFirebaseConfigured) {
-      await db.collection('packages').doc(id).delete();
+      await this._ref('packages/' + id).remove();
       return;
     }
     let packages = JSON.parse(localStorage.getItem('pp_packages') || '[]');
@@ -112,8 +108,9 @@ const DataStore = {
     booking.createdAt = new Date().toISOString();
     booking.confirmationCode = 'PP-' + Date.now().toString(36).toUpperCase().slice(-6);
     if (isFirebaseConfigured) {
-      const ref = await db.collection('bookings').add(booking);
-      return { id: ref.id, ...booking };
+      const ref = this._ref('bookings').push();
+      await ref.set(booking);
+      return { id: ref.key, ...booking };
     }
     const bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
     booking.id = 'bk_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
@@ -126,10 +123,10 @@ const DataStore = {
     const cleanPhone = phone.replace(/\D/g, '');
     const cleanLast = lastName.trim().toLowerCase();
     if (isFirebaseConfigured) {
-      const snap = await db.collection('bookings').get();
-      return snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(b => b.phone.replace(/\D/g, '') === cleanPhone && b.lastName.toLowerCase() === cleanLast);
+      const snap = await this._ref('bookings').once('value');
+      return this._snapToArray(snap)
+        .filter(b => b.phone && b.phone.replace(/\D/g, '') === cleanPhone &&
+                     b.lastName && b.lastName.toLowerCase() === cleanLast);
     }
     const bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
     return bookings.filter(b => b.phone.replace(/\D/g, '') === cleanPhone && b.lastName.toLowerCase() === cleanLast);
@@ -137,15 +134,15 @@ const DataStore = {
 
   async getAllBookings() {
     if (isFirebaseConfigured) {
-      const snap = await db.collection('bookings').orderBy('createdAt', 'desc').get();
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await this._ref('bookings').orderByChild('createdAt').once('value');
+      return this._snapToArray(snap).reverse();
     }
     return JSON.parse(localStorage.getItem('pp_bookings') || '[]').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   },
 
   async updateBooking(id, data) {
     if (isFirebaseConfigured) {
-      await db.collection('bookings').doc(id).update(data);
+      await this._ref('bookings/' + id).update(data);
       return;
     }
     const bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
@@ -156,7 +153,7 @@ const DataStore = {
 
   async deleteBooking(id) {
     if (isFirebaseConfigured) {
-      await db.collection('bookings').doc(id).delete();
+      await this._ref('bookings/' + id).remove();
       return;
     }
     let bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
@@ -167,8 +164,8 @@ const DataStore = {
   // --- BLOCKED DATES ---
   async getBlockedDates() {
     if (isFirebaseConfigured) {
-      const snap = await db.collection('blockedDates').get();
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const snap = await this._ref('blockedDates').once('value');
+      return this._snapToArray(snap);
     }
     return JSON.parse(localStorage.getItem('pp_blocked') || '[]');
   },
@@ -176,11 +173,12 @@ const DataStore = {
   async setBlockedDate(dateStr, blocked, slots, reason) {
     const data = { date: dateStr, blocked, blockedSlots: slots || [], reason: reason || '' };
     if (isFirebaseConfigured) {
-      const snap = await db.collection('blockedDates').where('date', '==', dateStr).get();
-      if (!snap.empty) {
-        await snap.docs[0].ref.set(data, { merge: true });
+      const snap = await this._ref('blockedDates').orderByChild('date').equalTo(dateStr).once('value');
+      if (snap.exists()) {
+        const key = Object.keys(snap.val())[0];
+        await this._ref('blockedDates/' + key).update(data);
       } else {
-        await db.collection('blockedDates').add(data);
+        await this._ref('blockedDates').push().set(data);
       }
       return;
     }
@@ -242,6 +240,6 @@ const DataStore = {
     for (const pkg of defaults) {
       await this.savePackage(pkg);
     }
-    console.log("✅ Default packages seeded");
+    console.log("✅ Default packages seeded to Firebase");
   }
 };
