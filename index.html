@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Peachy Pals Playland — Indoor Play & Birthday Parties | Cartersville, GA</title>
+  <meta name="description" content="Cartersville's favorite indoor play space for kids 6mo–8yr. Birthday parties, open play, memberships, field trips & more!">
+  <link rel="icon" type="image/png" href="images/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ========== BAMBOO DECORATIONS ========== -->
+  <div class="bamboo-left" aria-hidden="true"></div>
+  <div class="bamboo-right" aria-hidden="true"></div>
+  <div class="floating-leaves" id="floatingLeaves" aria-hidden="true"></div>
+
+  <!-- ========== TOAST NOTIFICATIONS ========== -->
+  <div id="toast-container"></div>
+
+  <!-- ========== NAVIGATION ========== -->
+  <nav class="main-nav" id="mainNav">
+    <div class="nav-container">
+      <a href="#home" class="nav-logo" onclick="navigate('home')">
+        <img src="images/logo.png" alt="Peachy Pals Playland" onerror="this.style.display='none'">
+        <span class="logo-text">Peachy Pals<small>Playland</small></span>
+      </a>
+      <div class="nav-links" id="navLinks">
+        <a href="#home" data-view="home" onclick="navigate('home')">Home</a>
+        <a href="#packages" data-view="packages" onclick="navigate('packages')">Packages</a>
+        <a href="#home" onclick="scrollToId('services')">Services</a>
+        <a href="#home" onclick="scrollToId('contact')">Contact</a>
+        <a href="#home" onclick="scrollToId('reviews')">Reviews</a>
+      </div>
+      <div class="nav-cta">
+        <button class="btn btn-cta-book pulse-soft" onclick="navigate('booking')">
+          <i class="fas fa-birthday-cake"></i> Book Now
+        </button>
+        <button class="btn btn-cta-manage" onclick="navigate('manage')">
+          <i class="fas fa-clipboard-list"></i> Manage Booking
+        </button>
+      </div>
+      <button class="hamburger" id="hamburger" onclick="toggleMobileNav()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Nav Overlay -->
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileNav()"></div>
+  <div class="mobile-nav" id="mobileNav">
+    <button class="mobile-close" onclick="toggleMobileNav()">&times;</button>
+    <a href="#home" onclick="navigate('home');toggleMobileNav()"><i class="fas fa-home"></i> Home</a>
+    <a href="#packages" onclick="navigate('packages');toggleMobileNav()"><i class="fas fa-gift"></i> Packages</a>
+    <a href="#home" onclick="scrollToId('services');toggleMobileNav()"><i class="fas fa-star"></i> Services</a>
+    <a href="#home" onclick="scrollToId('contact');toggleMobileNav()"><i class="fas fa-envelope"></i> Contact</a>
+    <a href="#home" onclick="scrollToId('reviews');toggleMobileNav()"><i class="fas fa-star-half-alt"></i> Reviews</a>
+    <hr>
+    <a href="#booking" class="mobile-book" onclick="navigate('booking');toggleMobileNav()"><i class="fas fa-birthday-cake"></i> Book a Party</a>
+    <a href="#manage" class="mobile-manage" onclick="navigate('manage');toggleMobileNav()"><i class="fas fa-clipboard-list"></i> Manage Booking</a>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ==================== HOME VIEW ======================= -->
+  <!-- ====================================================== -->
+  <div class="view active" id="view-home">
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-bg"></div>
+      <div class="hero-container">
+        <div class="hero-content">
+          <div class="hero-badge"><i class="fas fa-award"></i> Cartersville's #1 Indoor Play Space</div>
+          <h1>A Place to <span class="txt-gradient">Play</span>, <span class="txt-gradient">Imagine</span> &amp; <span class="txt-gradient">Grow</span></h1>
+          <p class="hero-sub">Indoor play, birthday parties &amp; family fun for ages 6 months – 8 years. Clean, safe, and full of adventure!</p>
+          <div class="hero-btns">
+            <button class="btn btn-primary btn-xl" onclick="navigate('booking')"><i class="fas fa-birthday-cake"></i> Book a Party</button>
+            <button class="btn btn-secondary btn-xl" onclick="navigate('manage')"><i class="fas fa-search"></i> Manage Booking</button>
+          </div>
+          <div class="hero-info">
+            <span><i class="fas fa-map-marker-alt"></i> 801 West Ave Suite 201, Cartersville GA</span>
+            <span><i class="fas fa-phone"></i> <a href="tel:+17703871020">(770) 387-1020</a></span>
+            <span><i class="fas fa-star"></i> 4.5★ · 38 Reviews</span>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <img src="images/logo.png" alt="Peachy Pals Panda" class="hero-mascot bounce-gentle" onerror="this.style.display='none'">
+        </div>
+      </div>
+      <div class="hero-wave"><svg viewBox="0 0 1440 120" preserveAspectRatio="none"><path d="M0,64 C360,120 720,0 1080,64 C1260,96 1380,80 1440,64 L1440,120 L0,120 Z" fill="var(--cream)"/></svg></div>
+    </section>
+
+    <!-- ABOUT -->
+    <section class="about" id="about">
+      <div class="container">
+        <h2 class="section-title">Welcome to <span class="txt-gradient">Peachy Pals Playland</span></h2>
+        <p class="section-desc">A family-friendly indoor play space in Cartersville, Georgia, designed for infants through early elementary-aged children. We offer open play, birthday parties, memberships, field trips, fundraisers, and private events in a clean, safe, and engaging environment.</p>
+        <div class="features-grid">
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-child"></i></div>
+            <h3>Ages 6mo – 8yr</h3>
+            <p>Play areas designed with safety, creativity, and development in mind</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+            <h3>Clean &amp; Safe</h3>
+            <p>Daily cleaning and sanitizing routines for every family's peace of mind</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-birthday-cake"></i></div>
+            <h3>Birthday Parties</h3>
+            <p>Stress-free celebrations with private rooms and full setup &amp; cleanup</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon"><i class="fas fa-users"></i></div>
+            <h3>Group Events</h3>
+            <p>Field trips, fundraisers &amp; private events for schools and organizations</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SERVICES -->
+    <section class="services" id="services">
+      <div class="container">
+        <h2 class="section-title">Our <span class="txt-gradient">Services</span></h2>
+        <div class="services-grid">
+          <div class="svc-card">
+            <div class="svc-icon">🎮</div>
+            <h3>Open Play</h3>
+            <div class="svc-price">$12 <small>/ 2 hours</small></div>
+            <p>Flexible playtime in our indoor play space. $18 for unlimited play. Adults free. Grippy socks required.</p>
+          </div>
+          <div class="svc-card featured">
+            <div class="svc-badge">Most Popular</div>
+            <div class="svc-icon">🎂</div>
+            <h3>Birthday Parties</h3>
+            <div class="svc-price">From $229</div>
+            <p>Private party room, dedicated playtime, staff support &amp; full cleanup.</p>
+            <button class="btn btn-primary btn-sm" onclick="navigate('packages')">View Packages</button>
+          </div>
+          <div class="svc-card">
+            <div class="svc-icon">⭐</div>
+            <h3>Memberships</h3>
+            <div class="svc-price">From $55<small>/mo</small></div>
+            <p>Unlimited visits! Monthly: $65/child. Annual: $55/child. $20 sibling discount.</p>
+          </div>
+          <div class="svc-card">
+            <div class="svc-icon">🚌</div>
+            <h3>Field Trips</h3>
+            <p>Schools, daycares, camps &amp; homeschool groups welcome for structured group play.</p>
+            <a href="mailto:info@peachypalsplay.com" class="btn btn-outline btn-sm">Inquire Now</a>
+          </div>
+          <div class="svc-card">
+            <div class="svc-icon">🎈</div>
+            <h3>Balloon Bar</h3>
+            <div class="svc-price">From $3</div>
+            <p>Helium fill-up $3–$5. Mini bundles from $15. Custom bouquets from $35. Characters from $10.</p>
+          </div>
+          <div class="svc-card">
+            <div class="svc-icon">📋</div>
+            <h3>Digital Waiver</h3>
+            <p>Complete once, play all year! Fast, easy, and good for 12 months.</p>
+            <a href="https://peachypals.pcsparty.com/sign/" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Sign Waiver</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PACKAGES PREVIEW -->
+    <section class="packages-section" id="packages-section">
+      <div class="container">
+        <h2 class="section-title">Party <span class="txt-gradient">Packages</span></h2>
+        <p class="section-desc">Choose the perfect package for your little one's special day!</p>
+        <div id="homePackagesGrid" class="packages-grid">
+          <!-- Populated by JS -->
+        </div>
+        <div class="text-center mt-2">
+          <button class="btn btn-primary btn-xl" onclick="navigate('booking')"><i class="fas fa-birthday-cake"></i> Book Your Party Now</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- REVIEWS -->
+    <section class="reviews-section" id="reviews">
+      <div class="container">
+        <h2 class="section-title">What Families Are <span class="txt-gradient">Saying</span></h2>
+        <div class="reviews-grid">
+          <div class="review-card">
+            <div class="review-stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+            <p>"Came here today for the first time with my niece and nephew and it was just amazing! The owners are so kind and it's such a clean, family-friendly place!"</p>
+            <div class="review-author"><strong>Julia M.</strong> · March 2026</div>
+          </div>
+          <div class="review-card">
+            <div class="review-stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i></div>
+            <p>"My daughter had the best birthday party here! The staff was so helpful and everything was set up perfectly. We will definitely be back!"</p>
+            <div class="review-author"><strong>Ashley T.</strong> · February 2026</div>
+          </div>
+          <div class="review-card">
+            <div class="review-stars"><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star-half-alt"></i></div>
+            <p>"Such a wonderful play space! My kids absolutely love it here. Clean, safe, and so much fun. The membership is totally worth it."</p>
+            <div class="review-author"><strong>Marcus R.</strong> · January 2026</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <a href="https://search.google.com/local/writereview?placeid=ChIJ3ysFO0lP9YgRD0P2J4gQK1o" target="_blank" rel="noopener" class="btn btn-outline">
+            <i class="fab fa-google"></i> Leave a Review
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTACT -->
+    <section class="contact-section" id="contact">
+      <div class="container">
+        <h2 class="section-title">Come Have a <span class="txt-gradient">Peach-Perfect Play</span></h2>
+        <div class="contact-grid">
+          <div class="contact-info">
+            <div class="contact-item"><i class="fas fa-map-marker-alt"></i><div><strong>Address</strong><br>801 West Ave Suite 201<br>Cartersville, Georgia 30120</div></div>
+            <div class="contact-item"><i class="fas fa-phone"></i><div><strong>Phone</strong><br><a href="tel:+17703871020">(770) 387-1020</a></div></div>
+            <div class="contact-item"><i class="fas fa-envelope"></i><div><strong>Email</strong><br><a href="mailto:info@peachypalsplay.com">info@peachypalsplay.com</a></div></div>
+            <div class="contact-item"><i class="fas fa-clock"></i><div><strong>Hours</strong><br>Open Play Everyday!<br>Check our social media for daily hours</div></div>
+          </div>
+          <div class="contact-map">
+            <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3304.5!2d-84.8!3d34.17!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMzTCsDEwJzEyLjAiTiA4NMKwNDcnNDIuMCJX!5e0!3m2!1sen!2sus!4v1" width="100%" height="300" style="border:0;border-radius:16px" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Peachy Pals Playland Location"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="main-footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <img src="images/logo.png" alt="Peachy Pals Playland" class="footer-logo" onerror="this.style.display='none'">
+            <p>A place to Play, Imagine &amp; Grow</p>
+          </div>
+          <div class="footer-links">
+            <h4>Quick Links</h4>
+            <a href="#home" onclick="navigate('home')">Home</a>
+            <a href="#packages" onclick="navigate('packages')">Packages</a>
+            <a href="#booking" onclick="navigate('booking')">Book Now</a>
+            <a href="#manage" onclick="navigate('manage')">Manage Booking</a>
+          </div>
+          <div class="footer-links">
+            <h4>Services</h4>
+            <a href="#" onclick="scrollToId('services')">Open Play</a>
+            <a href="#" onclick="scrollToId('services')">Birthday Parties</a>
+            <a href="#" onclick="scrollToId('services')">Memberships</a>
+            <a href="#" onclick="scrollToId('services')">Field Trips</a>
+          </div>
+          <div class="footer-links">
+            <h4>Contact</h4>
+            <a href="tel:+17703871020">(770) 387-1020</a>
+            <a href="mailto:info@peachypalsplay.com">info@peachypalsplay.com</a>
+            <a href="https://peachypals.pcsparty.com/sign/" target="_blank" rel="noopener">Sign Waiver</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <p>&copy; 2026 Peachy Pals Playland. All rights reserved.</p>
+          <button class="admin-btn" onclick="navigate('admin')"><i class="fas fa-lock"></i> Administrator</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ================== PACKAGES VIEW ===================== -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-packages">
+    <section class="page-header">
+      <h1><i class="fas fa-gift"></i> Party Packages</h1>
+      <p>Find the perfect celebration for your little one!</p>
+    </section>
+    <section class="container">
+      <div id="packagesDetailGrid" class="packages-grid packages-detail">
+        <!-- Populated by JS -->
+      </div>
+      <div class="text-center mt-2 mb-2">
+        <button class="btn btn-primary btn-xl" onclick="navigate('booking')"><i class="fas fa-birthday-cake"></i> Book Now</button>
+        <button class="btn btn-secondary btn-xl" onclick="navigate('home')"><i class="fas fa-arrow-left"></i> Back Home</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- =================== BOOKING VIEW ===================== -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-booking">
+    <section class="page-header">
+      <h1><i class="fas fa-birthday-cake"></i> Book Your Party</h1>
+      <p>Let's plan the perfect celebration!</p>
+    </section>
+    <section class="container booking-container">
+      <!-- Step Indicator -->
+      <div class="steps-bar">
+        <div class="step active" data-step="1"><span class="step-num">1</span><span class="step-label">Package</span></div>
+        <div class="step" data-step="2"><span class="step-num">2</span><span class="step-label">Date &amp; Time</span></div>
+        <div class="step" data-step="3"><span class="step-num">3</span><span class="step-label">Details</span></div>
+        <div class="step" data-step="4"><span class="step-num">4</span><span class="step-label">Payment</span></div>
+        <div class="step" data-step="5"><span class="step-num">5</span><span class="step-label">Confirm</span></div>
+      </div>
+
+      <!-- Step 1: Package Selection -->
+      <div class="booking-step active" id="bookStep1">
+        <h2>Choose Your Package</h2>
+        <div id="bookingPackagesGrid" class="packages-grid"><!-- JS --></div>
+      </div>
+
+      <!-- Step 2: Date & Time -->
+      <div class="booking-step" id="bookStep2">
+        <h2>Pick a Date &amp; Time</h2>
+        <div class="datetime-picker">
+          <div class="calendar-wrap">
+            <div class="calendar-header">
+              <button class="cal-nav" id="calPrev" onclick="calendarNav(-1)"><i class="fas fa-chevron-left"></i></button>
+              <h3 id="calMonth"></h3>
+              <button class="cal-nav" id="calNext" onclick="calendarNav(1)"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <div class="calendar-days">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+            <div class="calendar-grid" id="calGrid"><!-- JS --></div>
+          </div>
+          <div class="timeslot-wrap">
+            <h3>Available Times</h3>
+            <p class="selected-date-label" id="selectedDateLabel">Select a date first</p>
+            <div id="timeSlotsGrid" class="timeslots-grid"><!-- JS --></div>
+          </div>
+        </div>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="bookingStep(1)"><i class="fas fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary" onclick="bookingStep(3)" id="btnToStep3" disabled>Continue <i class="fas fa-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- Step 3: Contact Details -->
+      <div class="booking-step" id="bookStep3">
+        <h2>Your Details</h2>
+        <form id="bookingDetailsForm" class="booking-form" onsubmit="return false">
+          <div class="form-row">
+            <div class="form-group"><label>First Name *</label><input type="text" id="bkFirstName" required></div>
+            <div class="form-group"><label>Last Name *</label><input type="text" id="bkLastName" required></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Phone Number *</label><input type="tel" id="bkPhone" required placeholder="(xxx) xxx-xxxx"></div>
+            <div class="form-group"><label>Email</label><input type="email" id="bkEmail" placeholder="optional"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Birthday Child's Name *</label><input type="text" id="bkChildName" required></div>
+            <div class="form-group"><label>Child's Age *</label><input type="number" id="bkChildAge" min="0" max="12" required></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Number of Kids *</label><input type="number" id="bkNumKids" min="1" max="50" required></div>
+            <div class="form-group"><label>Number of Adults</label><input type="number" id="bkNumAdults" min="0" max="50" value="0"></div>
+          </div>
+          <div class="form-group"><label>Special Requests</label><textarea id="bkRequests" rows="3" placeholder="Any special needs, allergies, themes..."></textarea></div>
+        </form>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="bookingStep(2)"><i class="fas fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary" onclick="validateAndGoStep4()">Continue to Payment <i class="fas fa-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- Step 4: Payment -->
+      <div class="booking-step" id="bookStep4">
+        <h2>Deposit Payment</h2>
+        <div class="payment-summary" id="paymentSummary"><!-- JS --></div>
+        <div class="payment-methods">
+          <h3>Select Payment Method</h3>
+          <div class="pay-options">
+            <label class="pay-option"><input type="radio" name="payMethod" value="paypal"><i class="fab fa-paypal"></i> PayPal</label>
+            <label class="pay-option"><input type="radio" name="payMethod" value="venmo"><i class="fab fa-vimeo-v"></i> Venmo</label>
+            <label class="pay-option"><input type="radio" name="payMethod" value="cashapp"><i class="fas fa-dollar-sign"></i> Cash App</label>
+            <label class="pay-option"><input type="radio" name="payMethod" value="chime"><i class="fas fa-university"></i> Chime</label>
+            <label class="pay-option"><input type="radio" name="payMethod" value="card"><i class="fas fa-credit-card"></i> Debit / Credit Card</label>
+          </div>
+          <div id="paymentInstructions" class="payment-instructions"><!-- JS --></div>
+        </div>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="bookingStep(3)"><i class="fas fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary btn-xl" onclick="submitBooking()" id="btnSubmitBooking"><i class="fas fa-check-circle"></i> Confirm Booking</button>
+        </div>
+      </div>
+
+      <!-- Step 5: Confirmation -->
+      <div class="booking-step" id="bookStep5">
+        <div class="confirmation-box" id="confirmationBox"><!-- JS --></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ================ MANAGE BOOKING VIEW ================= -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-manage">
+    <section class="page-header">
+      <h1><i class="fas fa-clipboard-list"></i> Manage Your Booking</h1>
+      <p>Look up your existing booking to view, edit, or make changes</p>
+    </section>
+    <section class="container manage-container">
+      <div class="lookup-box" id="lookupBox">
+        <h2><i class="fas fa-search"></i> Find Your Booking</h2>
+        <p>Enter the phone number and last name used when booking.</p>
+        <form id="lookupForm" onsubmit="lookupBooking(); return false;">
+          <div class="form-group"><label>Last Name *</label><input type="text" id="lookupLastName" required placeholder="Enter last name"></div>
+          <div class="form-group"><label>Phone Number *</label><input type="tel" id="lookupPhone" required placeholder="(xxx) xxx-xxxx"></div>
+          <button type="submit" class="btn btn-primary btn-xl"><i class="fas fa-search"></i> Find Booking</button>
+        </form>
+      </div>
+      <div id="lookupResults" class="lookup-results" style="display:none">
+        <!-- JS populated -->
+      </div>
+      <div id="editBookingBox" class="edit-booking-box" style="display:none">
+        <!-- JS populated -->
+      </div>
+      <div class="text-center mt-2">
+        <button class="btn btn-secondary" onclick="navigate('home')"><i class="fas fa-arrow-left"></i> Back Home</button>
+        <button class="btn btn-primary" onclick="navigate('booking')"><i class="fas fa-plus"></i> New Booking</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- =================== ADMIN VIEW ======================= -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-admin">
+    <!-- Admin Login -->
+    <div id="adminLogin" class="admin-login-wrap">
+      <div class="admin-login-box">
+        <h2><i class="fas fa-lock"></i> Administrator Login</h2>
+        <p>Enter your 4-digit access code</p>
+        <div class="pin-input-wrap">
+          <input type="password" id="adminPin1" maxlength="1" class="pin-input" oninput="pinNext(this,1)" onkeydown="pinBack(event,this,1)">
+          <input type="password" id="adminPin2" maxlength="1" class="pin-input" oninput="pinNext(this,2)" onkeydown="pinBack(event,this,2)">
+          <input type="password" id="adminPin3" maxlength="1" class="pin-input" oninput="pinNext(this,3)" onkeydown="pinBack(event,this,3)">
+          <input type="password" id="adminPin4" maxlength="1" class="pin-input" oninput="pinNext(this,4)" onkeydown="pinBack(event,this,4)">
+        </div>
+        <p id="adminError" class="error-msg" style="display:none">Incorrect code. Try again.</p>
+        <button class="btn btn-primary btn-xl" onclick="adminLogin()"><i class="fas fa-sign-in-alt"></i> Login</button>
+        <button class="btn btn-outline" onclick="navigate('home')" style="margin-top:0.5rem"><i class="fas fa-arrow-left"></i> Back Home</button>
+      </div>
+    </div>
+
+    <!-- Admin Dashboard (hidden until login) -->
+    <div id="adminDashboard" style="display:none">
+      <section class="admin-header">
+        <div class="container admin-header-inner">
+          <h1><i class="fas fa-cog"></i> Admin Dashboard</h1>
+          <button class="btn btn-outline" onclick="adminLogout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+      </section>
+      <section class="container admin-body">
+        <!-- Admin Tabs -->
+        <div class="admin-tabs">
+          <button class="admin-tab active" data-tab="adminBookings" onclick="adminSwitchTab('adminBookings')"><i class="fas fa-calendar-alt"></i> Bookings</button>
+          <button class="admin-tab" data-tab="adminPackages" onclick="adminSwitchTab('adminPackages')"><i class="fas fa-gift"></i> Packages</button>
+          <button class="admin-tab" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
+        </div>
+
+        <!-- Admin: Bookings -->
+        <div class="admin-panel active" id="adminBookings">
+          <div class="admin-stats" id="adminStats"><!-- JS --></div>
+          <div class="admin-filter">
+            <label>Filter: </label>
+            <select id="adminBookingFilter" onchange="loadAdminBookings()">
+              <option value="all">All Bookings</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div id="adminBookingsList" class="admin-bookings-list"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: Packages -->
+        <div class="admin-panel" id="adminPackages">
+          <div class="admin-panel-header">
+            <h2>Manage Packages</h2>
+            <button class="btn btn-primary" onclick="openPackageEditor()"><i class="fas fa-plus"></i> Add Package</button>
+          </div>
+          <div id="adminPackagesList" class="admin-packages-list"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: Availability -->
+        <div class="admin-panel" id="adminAvailability">
+          <h2>Manage Availability</h2>
+          <p>Click a date to block/unblock it. Blocked dates won't appear as options for customers.</p>
+          <div class="admin-cal-wrap">
+            <div class="calendar-wrap">
+              <div class="calendar-header">
+                <button class="cal-nav" onclick="adminCalNav(-1)"><i class="fas fa-chevron-left"></i></button>
+                <h3 id="adminCalMonth"></h3>
+                <button class="cal-nav" onclick="adminCalNav(1)"><i class="fas fa-chevron-right"></i></button>
+              </div>
+              <div class="calendar-days">
+                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+              </div>
+              <div class="calendar-grid" id="adminCalGrid"><!-- JS --></div>
+            </div>
+            <div class="admin-date-detail" id="adminDateDetail">
+              <p>Select a date to manage its availability.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ================== MODAL OVERLAY ===================== -->
+  <!-- ====================================================== -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
+    <div class="modal" id="modal" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <!-- Confetti container -->
+  <div id="confetti-container" aria-hidden="true"></div>
+
+  <!-- ========== SCRIPTS ========== -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
