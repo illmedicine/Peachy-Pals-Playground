@@ -415,6 +415,7 @@
             <label class="pay-option"><input type="radio" name="payMethod" value="card"><i class="fas fa-credit-card"></i> Debit / Credit Card</label>
           </div>
           <div id="paymentInstructions" class="payment-instructions"><!-- JS --></div>
+          <p style="margin-top:1rem;font-size:0.85rem;color:var(--gray)"><i class="fas fa-info-circle"></i> Payment is optional during booking. You can pay anytime before your party via <strong>Manage Booking</strong>.</p>
         </div>
         <div class="step-nav">
           <button class="btn btn-outline" onclick="bookingStep(3)"><i class="fas fa-arrow-left"></i> Back</button>
@@ -717,6 +718,18 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
   <script src="js/firebase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="js/app.js"></script>
+  <script>
+    // PayPal SDK — loads only if client ID is configured
+    (function() {
+      var cid = typeof CONFIG !== 'undefined' && CONFIG.paypalClientId;
+      if (cid) {
+        var s = document.createElement('script');
+        s.src = 'https://www.paypal.com/sdk/js?client-id=' + cid + '&currency=USD';
+        document.head.appendChild(s);
+      }
+    })();
+  </script>
 </body>
 </html>

@@ -681,6 +681,11 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
   font-weight: 800; color: var(--peach-dark); font-size: 0.95rem; white-space: nowrap;
 }
 .addon-select-price small { font-weight: 600; font-size: 0.75rem; color: var(--gray); }
+.booking-pay-section {
+  padding: 0.75rem 1rem; margin: 0.5rem 0;
+  background: var(--cream2); border-radius: var(--radius);
+  border: 2px solid var(--peach-light);
+}
 .addon-qty-wrap {
   display: flex; align-items: center; gap: 0; border-radius: 8px;
   overflow: hidden; border: 2px solid var(--gray-light); flex-shrink: 0;

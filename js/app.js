@@ -23,6 +23,12 @@ const CONFIG = {
   weekdayPriceDays: ['Tuesday', 'Wednesday', 'Thursday'],
   businessPhone: '(770) 387-1020',
   businessEmail: 'info@peachypalsplay.com',
+  // EmailJS config — sign up free at emailjs.com, create a service + template
+  emailjsPublicKey: '',   // paste your public key here
+  emailjsServiceId: '',   // paste your service ID here
+  emailjsTemplateId: '',  // paste your template ID here
+  // PayPal — get client ID at developer.paypal.com
+  paypalClientId: '',      // paste your PayPal client ID here
   // Payment handles — owner should update these
   paymentInfo: {
     paypal: { label: 'PayPal', handle: 'info@peachypalsplay.com', instructions: 'Send deposit to <strong>info@peachypalsplay.com</strong> via PayPal. Include your booking confirmation code in the note.' },
@@ -347,9 +353,10 @@ function validateAndGoStep4() {
   }
 
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
-  const remaining = getSlotCapacity(selectedTime, dateBookings);
+  const pkgDuration = getPackageDuration(selectedPackage);
+  const remaining = getSlotCapacity(selectedTime, pkgDuration, dateBookings);
   if (numKids > remaining) {
-    const next = findNextAvailableSlot(selectedDate, selectedTime, numKids);
+    const next = findNextAvailableSlot(selectedDate, selectedTime, numKids, selectedPackage);
     let msg = `This time slot only has ${remaining} of ${CONFIG.maxCapacity} spots available, but your party has ${numKids} children.`;
     if (next) {
       msg += ` The next available slot is ${next.label}. Would you like to switch?`;
@@ -488,10 +495,6 @@ function renderPaymentSummary() {
 
 async function submitBooking() {
   const payMethod = document.querySelector('input[name="payMethod"]:checked');
-  if (!payMethod) {
-    showToast('Please select a payment method', 'error');
-    return;
-  }
 
   const pkg = selectedPackage;
   const basePrice = getPriceForDate(pkg, selectedDate);
@@ -501,6 +504,7 @@ async function submitBooking() {
   const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
   const total = basePrice + extraKids * (pkg.extraGuestFee || 0) + addOnsTotal;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
+  const pkgDuration = getPackageDuration(pkg);
 
   const booking = {
     firstName: document.getElementById('bkFirstName').value.trim(),
@@ -513,6 +517,8 @@ async function submitBooking() {
     packageName: pkg.name,
     date: selectedDate,
     timeSlot: selectedTime,
+    bookingStartHour: timeToHour(selectedTime),
+    bookingDuration: pkgDuration,
     numberOfKids: numKids,
     numberOfAdults: parseInt(document.getElementById('bkNumAdults').value) || 0,
     specialRequests: document.getElementById('bkRequests').value.trim(),
@@ -522,7 +528,7 @@ async function submitBooking() {
     depositPaid: false,
     depositAmount: deposit,
     totalPrice: total,
-    paymentMethod: payMethod.value
+    paymentMethod: payMethod ? payMethod.value : 'pay-later'
   };
 
   try {
@@ -530,19 +536,32 @@ async function submitBooking() {
     launchConfetti();
     showToast('Booking created successfully!', 'success');
 
+    const payLabel = payMethod ? (CONFIG.paymentInfo[payMethod.value]?.label || payMethod.value) : 'Pay Later';
+
     document.getElementById('confirmationBox').innerHTML = `
       <div style="font-size:4rem;margin-bottom:1rem">🎉</div>
       <h2>Booking Confirmed!</h2>
       <p style="color:var(--gray);margin-bottom:1rem">Your party booking has been received. Here's your confirmation code:</p>
       <div class="confirmation-code">${result.confirmationCode}</div>
       <div style="text-align:left;margin:1.5rem 0;padding:1rem;background:var(--cream);border-radius:var(--radius)">
-        <p><strong>Package:</strong> ${escapeHtml(pkg.name)}</p>
+        <p><strong>Package:</strong> ${escapeHtml(pkg.name)} (${pkgDuration}h)</p>
         <p><strong>Date:</strong> ${formatDateDisplay(selectedDate)}</p>
         <p><strong>Time:</strong> ${selectedTime}</p>
         <p><strong>Child:</strong> ${escapeHtml(booking.childName)} (Age ${booking.childAge})</p>
-        <p><strong>Total:</strong> $${total} | <strong>Deposit Due:</strong> $${deposit}</p>
-        <p><strong>Payment:</strong> ${CONFIG.paymentInfo[payMethod.value]?.label || payMethod.value}</p>
+        <p><strong>Total:</strong> $${total.toFixed(2)} | <strong>Deposit Due:</strong> $${deposit}</p>
+        <p><strong>Payment:</strong> ${payLabel}</p>
       </div>
+      ${!booking.depositPaid ? `
+        <div style="margin:1rem 0;padding:1rem;background:var(--cream2);border-radius:var(--radius);border:2px solid var(--peach-light)">
+          <p style="font-weight:700;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Your Deposit ($${deposit})</p>
+          <p style="font-size:0.85rem;color:var(--gray);margin-bottom:0.75rem">You can pay now or anytime before your party via Manage Booking.</p>
+          <div id="paypalBtnConfirm"></div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
+            ${CONFIG.paymentInfo.venmo ? `<a href="https://venmo.com/${CONFIG.paymentInfo.venmo.handle.replace('@','')}?txn=pay&amount=${deposit}&note=${encodeURIComponent('Peachy Pals ' + result.confirmationCode)}" target="_blank" class="btn btn-outline btn-sm"><i class="fab fa-vimeo-v"></i> Venmo $${deposit}</a>` : ''}
+            ${CONFIG.paymentInfo.cashapp ? `<a href="https://cash.app/${CONFIG.paymentInfo.cashapp.handle}/$${ deposit}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-dollar-sign"></i> Cash App $${deposit}</a>` : ''}
+          </div>
+        </div>
+      ` : ''}
       <p style="color:var(--gray);font-size:0.9rem;margin-bottom:1.5rem">
         Save your confirmation code! Use your <strong>phone number</strong> and <strong>last name</strong> to manage your booking anytime.
       </p>
@@ -552,6 +571,13 @@ async function submitBooking() {
       </div>
     `;
     bookingStep(5);
+
+    // Render PayPal button if configured
+    renderPayPalButton('paypalBtnConfirm', deposit, result.confirmationCode, result.id || booking.id);
+
+    // Send email notification
+    sendBookingEmail(booking, result.confirmationCode, total, deposit);
+
     resetBookingForm();
   } catch (err) {
     console.error('Booking error:', err);
@@ -588,12 +614,29 @@ function formatHourToTime(h) {
   return `${h12}:${String(min).padStart(2, '0')} ${ampm}`;
 }
 
-function getTimeSlotsForDate(dateStr) {
+function timeToHour(timeStr) {
+  const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return 0;
+  let h = parseInt(match[1]);
+  const m = parseInt(match[2]);
+  const ampm = match[3].toUpperCase();
+  if (ampm === 'PM' && h !== 12) h += 12;
+  if (ampm === 'AM' && h === 12) h = 0;
+  return h + m / 60;
+}
+
+function getPackageDuration(pkg) {
+  if (!pkg || !pkg.duration) return CONFIG.partyDuration;
+  const match = pkg.duration.match(/(\d+)/);
+  return match ? parseInt(match[1]) : CONFIG.partyDuration;
+}
+
+function getTimeSlotsForDate(dateStr, pkg) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   const dayOfWeek = date.getDay();
   const hours = CONFIG.hours[dayOfWeek];
-  const duration = CONFIG.partyDuration;
+  const duration = getPackageDuration(pkg);
   const buffer = 0.5;
   const slots = [];
   let t = hours.open;
@@ -602,17 +645,27 @@ function getTimeSlotsForDate(dateStr) {
     slots.push({
       value: formatHourToTime(t),
       label: formatHourToTime(t) + ' – ' + formatHourToTime(endH),
-      startHour: t
+      startHour: t,
+      duration: duration
     });
     t += duration + buffer;
   }
   return slots;
 }
 
-function getSlotCapacity(slotValue, bookings) {
-  const booked = bookings
-    .filter(b => b.timeSlot === slotValue && b.status !== 'cancelled')
-    .reduce((sum, b) => sum + (b.numberOfKids || 0), 0);
+function getSlotCapacity(slotValue, slotDuration, bookings) {
+  const slotStart = timeToHour(slotValue);
+  const slotEnd = slotStart + slotDuration;
+  let booked = 0;
+  for (const b of bookings) {
+    if (b.status === 'cancelled') continue;
+    const bStart = b.bookingStartHour != null ? b.bookingStartHour : timeToHour(b.timeSlot);
+    const bDuration = b.bookingDuration || CONFIG.partyDuration;
+    const bEnd = bStart + bDuration;
+    if (slotStart < bEnd && bStart < slotEnd) {
+      booked += (b.numberOfKids || 0);
+    }
+  }
   return CONFIG.maxCapacity - booked;
 }
 
@@ -631,16 +684,17 @@ function isWeekdayRate(dateStr) {
   return CONFIG.weekdayPriceDays.includes(getDayName(dateStr));
 }
 
-function findNextAvailableSlot(dateStr, afterSlotValue, partySize) {
-  const slots = getTimeSlotsForDate(dateStr);
+function findNextAvailableSlot(dateStr, afterSlotValue, partySize, pkg) {
+  const slots = getTimeSlotsForDate(dateStr, pkg);
   const blocked = blockedDates.find(b => b.date === dateStr);
   const blockedSlots = blocked?.blockedSlots || [];
+  const duration = getPackageDuration(pkg);
   let pastCurrent = false;
   for (const slot of slots) {
     if (slot.value === afterSlotValue) { pastCurrent = true; continue; }
     if (!pastCurrent) continue;
     if (blockedSlots.includes(slot.value)) continue;
-    const remaining = getSlotCapacity(slot.value, dateBookings);
+    const remaining = getSlotCapacity(slot.value, duration, dateBookings);
     if (remaining >= partySize) return slot;
   }
   return null;
@@ -720,13 +774,14 @@ function renderTimeSlots() {
   const grid = document.getElementById('timeSlotsGrid');
   if (!selectedDate) { grid.innerHTML = ''; return; }
 
-  const slots = getTimeSlotsForDate(selectedDate);
+  const pkgDuration = getPackageDuration(selectedPackage);
+  const slots = getTimeSlotsForDate(selectedDate, selectedPackage);
   const blocked = blockedDates.find(b => b.date === selectedDate);
   const blockedSlots = blocked?.blockedSlots || [];
 
   grid.innerHTML = slots.map(slot => {
     const isBlocked = blockedSlots.includes(slot.value);
-    const remaining = getSlotCapacity(slot.value, dateBookings);
+    const remaining = getSlotCapacity(slot.value, pkgDuration, dateBookings);
     const isFull = remaining <= 0;
     const isSelected = selectedTime === slot.value;
     const disabled = isBlocked || isFull;
@@ -814,6 +869,16 @@ function renderBookingCard(b, isAdmin) {
         <dt>Payment:</dt><dd>${CONFIG.paymentInfo[b.paymentMethod]?.label || b.paymentMethod || 'N/A'}</dd>
         ${b.specialRequests ? `<dt>Requests:</dt><dd>${escapeHtml(b.specialRequests)}</dd>` : ''}
       </dl>
+      ${!b.depositPaid && b.status !== 'cancelled' && !isAdmin ? `
+        <div class="booking-pay-section">
+          <p style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Deposit — $${b.depositAmount || 0}</p>
+          <div id="paypalBtn_${b.id}"></div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
+            <a href="https://venmo.com/${(CONFIG.paymentInfo.venmo?.handle || '').replace('@','')}?txn=pay&amount=${b.depositAmount}&note=${encodeURIComponent('Peachy Pals ' + (b.confirmationCode || ''))}" target="_blank" class="btn btn-outline btn-sm"><i class="fab fa-vimeo-v"></i> Venmo</a>
+            <a href="https://cash.app/${CONFIG.paymentInfo.cashapp?.handle || ''}/${b.depositAmount}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-dollar-sign"></i> Cash App</a>
+          </div>
+        </div>
+      ` : ''}
       <div class="booking-actions">
         ${b.status !== 'cancelled' ? `
           <button class="btn btn-outline btn-sm" onclick="editBooking('${b.id}', ${isAdmin})"><i class="fas fa-edit"></i> Edit</button>
@@ -1768,6 +1833,82 @@ function resetMembershipForm() {
   document.getElementById('siblingNamesContainer').innerHTML = '';
   document.getElementById('siblingNamesContainer').style.display = 'none';
   document.querySelectorAll('.mem-plan-card').forEach(c => c.classList.remove('selected'));
+}
+
+// ==========================================
+// PAYPAL & EMAIL
+// ==========================================
+function renderPayPalButton(containerId, amount, confirmCode, bookingId) {
+  if (!CONFIG.paypalClientId || typeof paypal === 'undefined') return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  try {
+    paypal.Buttons({
+      style: { layout: 'horizontal', color: 'gold', shape: 'pill', label: 'pay', height: 40 },
+      createOrder: (data, actions) => actions.order.create({
+        purchase_units: [{
+          amount: { value: amount.toFixed(2) },
+          description: 'Peachy Pals Playland — Deposit ' + confirmCode
+        }]
+      }),
+      onApprove: async (data, actions) => {
+        const details = await actions.order.capture();
+        if (bookingId) {
+          await DataStore.updateBooking(bookingId, { depositPaid: true, paypalOrderId: details.id });
+        }
+        showToast('Payment successful! Deposit paid.', 'success');
+        container.innerHTML = '<p style="color:var(--bamboo);font-weight:700"><i class="fas fa-check-circle"></i> Deposit Paid</p>';
+      },
+      onError: (err) => {
+        console.error('PayPal error:', err);
+        showToast('Payment failed. Please try again.', 'error');
+      }
+    }).render('#' + containerId);
+  } catch (e) { console.warn('PayPal render failed:', e); }
+}
+
+async function sendBookingEmail(booking, confirmCode, total, deposit) {
+  // EmailJS integration
+  if (CONFIG.emailjsServiceId && CONFIG.emailjsTemplateId && CONFIG.emailjsPublicKey) {
+    try {
+      await emailjs.send(CONFIG.emailjsServiceId, CONFIG.emailjsTemplateId, {
+        to_email: CONFIG.businessEmail,
+        confirmation_code: confirmCode,
+        package_name: booking.packageName,
+        date: formatDateDisplay(booking.date),
+        time_slot: booking.timeSlot,
+        first_name: booking.firstName,
+        last_name: booking.lastName,
+        phone: booking.phone,
+        email: booking.email || 'Not provided',
+        child_name: booking.childName,
+        child_age: booking.childAge,
+        num_kids: booking.numberOfKids,
+        num_adults: booking.numberOfAdults,
+        total: '$' + total.toFixed(2),
+        deposit: '$' + deposit,
+        payment_method: booking.paymentMethod,
+        special_requests: booking.specialRequests || 'None'
+      }, CONFIG.emailjsPublicKey);
+      console.log('✅ Booking email sent');
+    } catch (e) { console.warn('Email send failed:', e); }
+    return;
+  }
+  // Fallback: Web3Forms (free, no signup — just get access key at web3forms.com)
+  try {
+    await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        access_key: CONFIG.web3formsKey || '',
+        subject: 'New Booking: ' + confirmCode + ' — ' + booking.packageName,
+        from_name: 'Peachy Pals Playland',
+        to: CONFIG.businessEmail,
+        message: `New Booking Received!\n\nConfirmation: ${confirmCode}\nPackage: ${booking.packageName}\nDate: ${formatDateDisplay(booking.date)}\nTime: ${booking.timeSlot}\nGuest: ${booking.firstName} ${booking.lastName}\nPhone: ${booking.phone}\nEmail: ${booking.email || 'N/A'}\nChild: ${booking.childName} (Age ${booking.childAge})\nKids: ${booking.numberOfKids} | Adults: ${booking.numberOfAdults}\nTotal: $${total.toFixed(2)} | Deposit: $${deposit}\nPayment: ${booking.paymentMethod}\nRequests: ${booking.specialRequests || 'None'}`
+      })
+    });
+    console.log('✅ Booking email sent via Web3Forms');
+  } catch (e) { console.warn('Email fallback failed:', e); }
 }
 
 // ==========================================
