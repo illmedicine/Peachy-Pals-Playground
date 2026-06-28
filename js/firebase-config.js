@@ -13,6 +13,18 @@
 //     "blockedDates": { ".read": true, ".write": true }
 //   }
 // }
+//
+// STORAGE RULES (paste in Firebase Console > Storage > Rules):
+// -------------------------------------------------------------------
+// rules_version = '2';
+// service firebase.storage {
+//   match /b/{bucket}/o {
+//     match /{allPaths=**} {
+//       allow read: if true;
+//       allow write: if true;
+//     }
+//   }
+// }
 // ==========================================
 
 const firebaseConfig = {
@@ -28,13 +40,15 @@ const firebaseConfig = {
 
 // Initialize Firebase
 let db;
+let storage;
 let isFirebaseConfigured = false;
 
 try {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
+  storage = firebase.storage();
   isFirebaseConfigured = true;
-  console.log("✅ Firebase Realtime Database connected");
+  console.log("✅ Firebase connected (RTDB + Storage)");
 } catch (e) {
   console.error("❌ Firebase initialization failed:", e);
   console.warn("⚠️ Falling back to localStorage.");
@@ -232,6 +246,53 @@ const DataStore = {
     if (idx >= 0) dates[idx] = { ...dates[idx], ...data };
     else { data.id = 'bd_' + Date.now(); dates.push(data); }
     localStorage.setItem('pp_blocked', JSON.stringify(dates));
+  },
+
+  // --- IMAGE UPLOAD ---
+  async uploadImage(file, folder = 'packages') {
+    if (!isFirebaseConfigured || !storage) {
+      throw new Error('Firebase Storage not available');
+    }
+    const ext = file.name.split('.').pop().toLowerCase();
+    const filename = folder + '_' + Date.now() + '.' + ext;
+    const ref = storage.ref(folder + '/' + filename);
+    const snapshot = await ref.put(file);
+    return await snapshot.ref.getDownloadURL();
+  },
+
+  // --- PACKAGE FIELD UPDATE ---
+  async updatePackageFields(id, data) {
+    if (isFirebaseConfigured) {
+      await this._ref('packages/' + id).update(data);
+      return;
+    }
+    const packages = JSON.parse(localStorage.getItem('pp_packages') || '[]');
+    const idx = packages.findIndex(p => p.id === id);
+    if (idx >= 0) Object.assign(packages[idx], data);
+    localStorage.setItem('pp_packages', JSON.stringify(packages));
+  },
+
+  // --- MIGRATE EXISTING PACKAGES ---
+  async migratePackages() {
+    const pkgs = await this.getPackages();
+    const allDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    for (const pkg of pkgs) {
+      const updates = {};
+      if (pkg.name === 'Just Peachy') {
+        if (!pkg.weekendPrice) updates.weekendPrice = 299;
+        if (pkg.availableDays && pkg.availableDays.length < 7) updates.availableDays = allDays;
+        if (pkg.subtitle === 'Tues – Thurs') updates.subtitle = 'Any Day';
+      }
+      if (pkg.name === 'Peachy Pal') {
+        if (!pkg.weekendPrice) updates.weekendPrice = 399;
+        if (pkg.availableDays && pkg.availableDays.length < 7) updates.availableDays = allDays;
+        if (pkg.subtitle === 'Tues – Thurs') updates.subtitle = 'Any Day';
+      }
+      if (Object.keys(updates).length > 0) {
+        await this.updatePackageFields(pkg.id, updates);
+        console.log('✅ Migrated package:', pkg.name, updates);
+      }
+    }
   },
 
   // --- SEED DEFAULT PACKAGES ---

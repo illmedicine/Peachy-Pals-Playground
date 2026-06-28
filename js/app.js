@@ -552,7 +552,12 @@ async function selectDate(dateStr) {
   selectedDate = dateStr;
   selectedTime = null;
   renderCalendar();
-  dateBookings = await DataStore.getBookingsByDate(dateStr);
+  try {
+    dateBookings = await DataStore.getBookingsByDate(dateStr);
+  } catch (err) {
+    console.warn('Could not load bookings for date:', err);
+    dateBookings = [];
+  }
   renderTimeSlots();
 
   const rateLabel = isWeekdayRate(dateStr) ? '' : ' (weekend rate)';
@@ -902,7 +907,13 @@ function openPackageEditor(pkgId) {
       <div class="form-row">
         <div class="form-group"><label>Duration</label><input type="text" id="pkgDuration" value="${escapeHtml(pkg?.duration || '2 hours')}"></div>
       </div>
-      <div class="form-group"><label>Image URL</label><input type="url" id="pkgImageUrl" value="${escapeHtml(pkg?.imageUrl || '')}" placeholder="https://..."></div>
+      <div class="form-group">
+        <label>Package Image</label>
+        <div id="pkgImagePreview" style="width:100%;height:120px;border-radius:12px;background:${pkg?.imageUrl ? "url('" + escapeHtml(pkg.imageUrl) + "') center/cover" : 'var(--gray-lighter)'};margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:0.85rem">${pkg?.imageUrl ? '' : 'No image'}</div>
+        <input type="file" id="pkgImageFile" accept="image/*" onchange="previewPkgImage(this)" style="margin-bottom:0.5rem">
+        <div id="pkgUploadProgress" style="display:none;margin-bottom:0.5rem"><div style="background:var(--gray-lighter);border-radius:8px;overflow:hidden;height:6px"><div id="pkgUploadBar" style="height:100%;background:var(--peach);width:0%;transition:width 0.3s"></div></div><small id="pkgUploadText" style="color:var(--gray)">Uploading...</small></div>
+        <input type="hidden" id="pkgImageUrl" value="${escapeHtml(pkg?.imageUrl || '')}">
+      </div>
       <div class="form-group"><label>Includes (one per line)</label><textarea id="pkgIncludes" rows="4">${(pkg?.includes || []).join('\n')}</textarea></div>
       <div class="form-group"><label>Available Days</label><input type="text" id="pkgDays" value="${(pkg?.availableDays || []).join(', ')}" placeholder="Monday, Tuesday, Wednesday..."></div>
       <div class="form-group"><label>Sort Order</label><input type="number" id="pkgSort" value="${pkg?.sortOrder || 0}"></div>
@@ -918,6 +929,20 @@ function openPackageEditor(pkgId) {
   openModal(html);
 }
 
+function previewPkgImage(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const preview = document.getElementById('pkgImagePreview');
+    preview.style.backgroundImage = `url('${e.target.result}')`;
+    preview.style.backgroundSize = 'cover';
+    preview.style.backgroundPosition = 'center';
+    preview.textContent = '';
+  };
+  reader.readAsDataURL(file);
+}
+
 async function savePackageAdmin(pkgId) {
   const name = document.getElementById('pkgName').value.trim();
   const price = parseFloat(document.getElementById('pkgPrice').value);
@@ -926,6 +951,25 @@ async function savePackageAdmin(pkgId) {
   if (!name || isNaN(price) || isNaN(maxGuests)) {
     showToast('Please fill in required fields', 'error');
     return;
+  }
+
+  let imageUrl = document.getElementById('pkgImageUrl').value.trim();
+  const fileInput = document.getElementById('pkgImageFile');
+  if (fileInput.files && fileInput.files[0]) {
+    try {
+      const progressEl = document.getElementById('pkgUploadProgress');
+      progressEl.style.display = 'block';
+      document.getElementById('pkgUploadText').textContent = 'Uploading image...';
+      document.getElementById('pkgUploadBar').style.width = '50%';
+      imageUrl = await DataStore.uploadImage(fileInput.files[0], 'packages');
+      document.getElementById('pkgUploadBar').style.width = '100%';
+      document.getElementById('pkgUploadText').textContent = 'Upload complete!';
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      showToast('Image upload failed. Check Firebase Storage rules.', 'error');
+      document.getElementById('pkgUploadProgress').style.display = 'none';
+      return;
+    }
   }
 
   const weekendPrice = parseFloat(document.getElementById('pkgWeekendPrice').value);
@@ -939,7 +983,7 @@ async function savePackageAdmin(pkgId) {
     maxGuests,
     extraGuestFee: parseFloat(document.getElementById('pkgExtraFee').value) || 0,
     duration: document.getElementById('pkgDuration').value.trim(),
-    imageUrl: document.getElementById('pkgImageUrl').value.trim(),
+    imageUrl,
     includes: document.getElementById('pkgIncludes').value.split('\n').map(s => s.trim()).filter(Boolean),
     availableDays: document.getElementById('pkgDays').value.split(',').map(s => s.trim()).filter(Boolean),
     sortOrder: parseInt(document.getElementById('pkgSort').value) || 0,
@@ -1425,8 +1469,9 @@ function escapeHtml(str) {
 // INITIALIZATION
 // ==========================================
 async function init() {
-  // Seed default packages if empty
+  // Seed default packages if empty, then migrate existing ones
   await DataStore.seedDefaults();
+  await DataStore.migratePackages();
 
   // Render home packages
   await renderHomePackages();
