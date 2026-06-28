@@ -107,25 +107,63 @@
         <h2 class="section-title">Welcome to <span class="txt-gradient">Peachy Pals Playland</span></h2>
         <p class="section-desc">A family-friendly indoor play space in Cartersville, Georgia, designed for infants through early elementary-aged children. We offer open play, birthday parties, memberships, field trips, fundraisers, and private events in a clean, safe, and engaging environment.</p>
         <div class="features-grid">
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-child"></i></div>
-            <h3>Ages 6mo – 8yr</h3>
-            <p>Play areas designed with safety, creativity, and development in mind</p>
+          <div class="feature-flip" onclick="this.classList.toggle('flipped')">
+            <div class="feature-card-inner">
+              <div class="feature-front">
+                <div class="feature-icon"><i class="fas fa-child"></i></div>
+                <h3>Ages 6mo – 8yr</h3>
+                <p>Play areas built for safety, creativity &amp; development</p>
+                <span class="flip-hint"><i class="fas fa-sync-alt"></i> Tap for details</span>
+              </div>
+              <div class="feature-back">
+                <h3>Designed for Little Explorers</h3>
+                <p>Our play space is thoughtfully designed for children ages 6 months through 8 years. Every play zone is age-appropriate with soft surfaces, rounded edges, and sensory-rich activities that encourage motor skill development, imaginative play, and social interaction. From crawling infants to adventurous grade-schoolers, every child finds their perfect play area. One accompanying adult per child is always free.</p>
+              </div>
+            </div>
           </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
-            <h3>Clean &amp; Safe</h3>
-            <p>Daily cleaning and sanitizing routines for every family's peace of mind</p>
+          <div class="feature-flip" onclick="this.classList.toggle('flipped')">
+            <div class="feature-card-inner">
+              <div class="feature-front">
+                <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+                <h3>Clean &amp; Safe</h3>
+                <p>Sanitized daily for every family's peace of mind</p>
+                <span class="flip-hint"><i class="fas fa-sync-alt"></i> Tap for details</span>
+              </div>
+              <div class="feature-back">
+                <h3>The Peachy Pals Standard</h3>
+                <p>Cleanliness is at the core of the Peachy Pals experience. We follow a rigorous daily sanitization routine using hospital-grade, child-safe disinfectants on every surface, play structure, and shared toy. High-touch areas are cleaned multiple times throughout the day. Grippy socks are required for all guests to maintain hygiene and prevent slips. Our staff is First Aid &amp; CPR certified, and we maintain strict capacity limits so your child always plays in a safe, supervised environment.</p>
+              </div>
+            </div>
           </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-birthday-cake"></i></div>
-            <h3>Birthday Parties</h3>
-            <p>Stress-free celebrations with private rooms and full setup &amp; cleanup</p>
+          <div class="feature-flip" onclick="this.classList.toggle('flipped')">
+            <div class="feature-card-inner">
+              <div class="feature-front">
+                <div class="feature-icon"><i class="fas fa-birthday-cake"></i></div>
+                <h3>Birthday Parties</h3>
+                <p>Stress-free celebrations with full setup &amp; cleanup</p>
+                <span class="flip-hint"><i class="fas fa-sync-alt"></i> Tap for details</span>
+              </div>
+              <div class="feature-back">
+                <h3>Unforgettable Celebrations</h3>
+                <p>Let us handle everything so you can enjoy the party! Choose from our Just Peachy, Peachy Pal, or Feeling Peachy Deluxe packages. Every party includes a 2-hour time block with dedicated play time, a private party area, drinks and snacks for each child, and complete setup and cleanup by our team. Upgrade for goodie bags, a birthday shirt for the guest of honor, and ice cream. Parties are available any day of the week — weekday rates start at just $229.</p>
+                <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); navigate('packages')">View Packages</button>
+              </div>
+            </div>
           </div>
-          <div class="feature-card">
-            <div class="feature-icon"><i class="fas fa-users"></i></div>
-            <h3>Group Events</h3>
-            <p>Field trips, fundraisers &amp; private events for schools and organizations</p>
+          <div class="feature-flip" onclick="this.classList.toggle('flipped')">
+            <div class="feature-card-inner">
+              <div class="feature-front">
+                <div class="feature-icon"><i class="fas fa-users"></i></div>
+                <h3>Group Events</h3>
+                <p>Field trips, fundraisers &amp; private events</p>
+                <span class="flip-hint"><i class="fas fa-sync-alt"></i> Tap for details</span>
+              </div>
+              <div class="feature-back">
+                <h3>Bring Your Group</h3>
+                <p>Peachy Pals Playland is the perfect destination for schools, daycares, camps, homeschool co-ops, churches, and community organizations. We offer structured group play sessions with flexible scheduling, group pricing, and dedicated staff support. Fundraiser events are available where a percentage of proceeds goes back to your organization. Contact us to plan your next field trip, team outing, or private event!</p>
+                <a href="mailto:info@peachypalsplay.com" class="btn btn-outline btn-sm" onclick="event.stopPropagation()">Inquire Now</a>
+              </div>
+            </div>
           </div>
         </div>
       </div>
