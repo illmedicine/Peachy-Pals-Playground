@@ -27,10 +27,10 @@ const CONFIG = {
   emailjsPublicKey: '',   // paste your public key here
   emailjsServiceId: '',   // paste your service ID here
   emailjsTemplateId: '',  // paste your template ID here
-  // Square — get these at developer.squareup.com > Applications
-  squareAppId: '',          // paste your Square Application ID here
-  squareLocationId: '',     // paste your Square Location ID here
-  squarePayEndpoint: '',    // URL of your payment processing worker (see square-worker.js)
+  // Square — credentials from developer.squareup.com
+  squareAppId: 'sandbox-sq0idb-jjkI_jNaTY8szwrHO6rwVg',
+  squareLocationId: 'LDFD5P82KMCHA',
+  squarePayEndpoint: '',    // paste your Cloudflare Worker URL here after deploying square-worker.js
   // Payment handles — owner should update these
   paymentInfo: {
     paypal: { label: 'PayPal', handle: 'info@peachypalsplay.com', instructions: 'Send deposit to <strong>info@peachypalsplay.com</strong> via PayPal. Include your booking confirmation code in the note.' },

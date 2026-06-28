@@ -19,9 +19,13 @@
 // TESTING: Use sandbox credentials first, then switch to production
 // =====================================================
 
-const SQUARE_ACCESS_TOKEN = 'YOUR_SQUARE_ACCESS_TOKEN';  // Replace this!
-const SQUARE_API_URL = 'https://connect.squareup.com/v2/payments';
-// For sandbox testing, use: 'https://connect.squareupsandbox.com/v2/payments'
+// ⚠️ PASTE YOUR ACCESS TOKEN ONLY HERE IN CLOUDFLARE — NEVER COMMIT IT TO GITHUB
+const SQUARE_ACCESS_TOKEN = 'YOUR_SQUARE_ACCESS_TOKEN';
+
+// Sandbox for testing, switch to production when ready:
+// Sandbox: 'https://connect.squareupsandbox.com/v2/payments'
+// Production: 'https://connect.squareup.com/v2/payments'
+const SQUARE_API_URL = 'https://connect.squareupsandbox.com/v2/payments';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

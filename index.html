@@ -721,11 +721,14 @@
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="js/app.js"></script>
   <script>
-    // Square Web Payments SDK — loads only if app ID is configured
+    // Square Web Payments SDK — loads sandbox or production based on app ID
     (function() {
       if (typeof CONFIG !== 'undefined' && CONFIG.squareAppId) {
         var s = document.createElement('script');
-        s.src = 'https://web.squarecdn.com/v1/square.js';
+        var isSandbox = CONFIG.squareAppId.startsWith('sandbox-');
+        s.src = isSandbox
+          ? 'https://sandbox.web.squarecdn.com/v1/square.js'
+          : 'https://web.squarecdn.com/v1/square.js';
         document.head.appendChild(s);
       }
     })();
