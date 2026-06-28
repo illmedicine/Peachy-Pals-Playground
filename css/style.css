@@ -667,18 +667,39 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
 .addon-select-item {
   display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem;
   border: 2px solid var(--gray-light); border-radius: var(--radius);
-  cursor: pointer; transition: var(--transition); margin-bottom: 0.5rem;
+  transition: var(--transition); margin-bottom: 0.5rem;
   background: var(--white);
 }
 .addon-select-item:hover { border-color: var(--peach); }
-.addon-select-item:has(input:checked) { border-color: var(--peach); background: var(--peach-lighter); }
-.addon-select-item input[type="checkbox"] {
-  width: 18px; height: 18px; accent-color: var(--peach); flex-shrink: 0;
+.addon-select-item:has(.bk-addon-cb:checked) { border-color: var(--peach); background: var(--peach-lighter); }
+.addon-select-check { cursor: pointer; flex-shrink: 0; }
+.addon-select-check input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--peach); cursor: pointer;
 }
 .addon-select-name { flex: 1; font-weight: 600; font-size: 0.95rem; }
 .addon-select-price {
   font-weight: 800; color: var(--peach-dark); font-size: 0.95rem; white-space: nowrap;
 }
+.addon-select-price small { font-weight: 600; font-size: 0.75rem; color: var(--gray); }
+.addon-qty-wrap {
+  display: flex; align-items: center; gap: 0; border-radius: 8px;
+  overflow: hidden; border: 2px solid var(--gray-light); flex-shrink: 0;
+}
+.addon-qty-btn {
+  width: 32px; height: 32px; border: none; background: var(--gray-lighter);
+  font-size: 1.1rem; font-weight: 800; cursor: pointer; color: var(--dark);
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.addon-qty-btn:hover { background: var(--peach-light); }
+.addon-qty-input {
+  width: 40px; height: 32px; border: none; text-align: center;
+  font-weight: 800; font-size: 0.95rem; font-family: var(--font-body);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.addon-qty-input::-webkit-inner-spin-button,
+.addon-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
 /* Confirmation */
 .confirmation-box {

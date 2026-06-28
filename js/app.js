@@ -359,20 +359,55 @@ function renderBookingAddOns() {
   }
   section.style.display = 'block';
   list.innerHTML = addOns.map((a, i) => `
-    <label class="addon-select-item">
-      <input type="checkbox" class="bk-addon-cb" data-index="${i}" data-name="${escapeHtml(a.name)}" data-price="${a.price}">
+    <div class="addon-select-item" data-index="${i}">
+      <label class="addon-select-check">
+        <input type="checkbox" class="bk-addon-cb" data-index="${i}" data-name="${escapeHtml(a.name)}" data-price="${a.price}" onchange="toggleAddonQty(${i})">
+      </label>
       <span class="addon-select-name">${escapeHtml(a.name)}</span>
-      <span class="addon-select-price">+$${a.price.toFixed(2)}</span>
-    </label>
+      <div class="addon-qty-wrap" id="addonQty_${i}" style="display:none">
+        <button type="button" class="addon-qty-btn" onclick="changeAddonQty(${i},-1)">-</button>
+        <input type="number" class="addon-qty-input" id="addonQtyVal_${i}" value="1" min="1" max="${a.maxQty || 99}" onchange="clampAddonQty(${i})">
+        <button type="button" class="addon-qty-btn" onclick="changeAddonQty(${i},1)">+</button>
+      </div>
+      <span class="addon-select-price">$${a.price.toFixed(2)}<small>/ea</small></span>
+    </div>
   `).join('');
+}
+
+function toggleAddonQty(idx) {
+  const cb = document.querySelector(`.bk-addon-cb[data-index="${idx}"]`);
+  const qtyWrap = document.getElementById('addonQty_' + idx);
+  qtyWrap.style.display = cb.checked ? 'flex' : 'none';
+  if (cb.checked) document.getElementById('addonQtyVal_' + idx).value = 1;
+}
+
+function changeAddonQty(idx, delta) {
+  const input = document.getElementById('addonQtyVal_' + idx);
+  const max = parseInt(input.max) || 99;
+  let val = parseInt(input.value) || 1;
+  val = Math.max(1, Math.min(max, val + delta));
+  input.value = val;
+}
+
+function clampAddonQty(idx) {
+  const input = document.getElementById('addonQtyVal_' + idx);
+  const max = parseInt(input.max) || 99;
+  let val = parseInt(input.value) || 1;
+  input.value = Math.max(1, Math.min(max, val));
 }
 
 function getSelectedAddOns() {
   const checked = document.querySelectorAll('.bk-addon-cb:checked');
-  return Array.from(checked).map(cb => ({
-    name: cb.dataset.name,
-    price: parseFloat(cb.dataset.price)
-  }));
+  return Array.from(checked).map(cb => {
+    const idx = cb.dataset.index;
+    const qty = parseInt(document.getElementById('addonQtyVal_' + idx)?.value) || 1;
+    return {
+      name: cb.dataset.name,
+      unitPrice: parseFloat(cb.dataset.price),
+      quantity: qty,
+      price: parseFloat(cb.dataset.price) * qty
+    };
+  });
 }
 
 function getAddOnsTotal() {
@@ -392,7 +427,7 @@ function renderPaymentSummary() {
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
 
   const addOnsHtml = selectedAddOns.map(a =>
-    `<tr><td style="padding-left:1rem;color:var(--gray)">+ ${escapeHtml(a.name)}</td><td>+$${a.price.toFixed(2)}</td></tr>`
+    `<tr><td style="padding-left:1rem;color:var(--gray)">+ ${escapeHtml(a.name)}${a.quantity > 1 ? ' x' + a.quantity : ''}</td><td>+$${a.price.toFixed(2)}</td></tr>`
   ).join('');
 
   document.getElementById('paymentSummary').innerHTML = `
@@ -1006,7 +1041,8 @@ function openPackageEditor(pkgId) {
         <div id="pkgAddOnsContainer">${(pkg?.addOns || []).map((a, i) => `
           <div class="addon-row" style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center">
             <input type="text" class="addon-name" value="${escapeHtml(a.name)}" placeholder="Item name" style="flex:2">
-            <input type="number" class="addon-price" value="${a.price}" placeholder="$" min="0" step="0.01" style="flex:0.8">
+            <input type="number" class="addon-price" value="${a.price}" placeholder="$ each" min="0" step="0.01" style="flex:0.7">
+            <input type="number" class="addon-maxqty" value="${a.maxQty || 99}" placeholder="Max" min="1" style="flex:0.5" title="Max quantity">
             <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:0.3rem 0.6rem">&times;</button>
           </div>`).join('')}
         </div>
@@ -1033,7 +1069,8 @@ function addAddonRow() {
   row.style.cssText = 'display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center';
   row.innerHTML = `
     <input type="text" class="addon-name" placeholder="Item name (e.g. Whole Pizza)" style="flex:2">
-    <input type="number" class="addon-price" placeholder="$" min="0" step="0.01" style="flex:0.8">
+    <input type="number" class="addon-price" placeholder="$ each" min="0" step="0.01" style="flex:0.7">
+    <input type="number" class="addon-maxqty" value="99" placeholder="Max" min="1" style="flex:0.5" title="Max quantity">
     <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:0.3rem 0.6rem">&times;</button>
   `;
   container.appendChild(row);
@@ -1045,8 +1082,9 @@ function getAddonRows() {
   rows.forEach(row => {
     const name = row.querySelector('.addon-name').value.trim();
     const price = parseFloat(row.querySelector('.addon-price').value);
+    const maxQty = parseInt(row.querySelector('.addon-maxqty').value) || 99;
     if (name && !isNaN(price)) {
-      addOns.push({ name, price });
+      addOns.push({ name, price, maxQty });
     }
   });
   return addOns;
