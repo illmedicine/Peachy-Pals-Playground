@@ -27,8 +27,10 @@ const CONFIG = {
   emailjsPublicKey: '',   // paste your public key here
   emailjsServiceId: '',   // paste your service ID here
   emailjsTemplateId: '',  // paste your template ID here
-  // PayPal — get client ID at developer.paypal.com
-  paypalClientId: '',      // paste your PayPal client ID here
+  // Square — get these at developer.squareup.com > Applications
+  squareAppId: '',          // paste your Square Application ID here
+  squareLocationId: '',     // paste your Square Location ID here
+  squarePayEndpoint: '',    // URL of your payment processing worker (see square-worker.js)
   // Payment handles — owner should update these
   paymentInfo: {
     paypal: { label: 'PayPal', handle: 'info@peachypalsplay.com', instructions: 'Send deposit to <strong>info@peachypalsplay.com</strong> via PayPal. Include your booking confirmation code in the note.' },
@@ -555,7 +557,7 @@ async function submitBooking() {
         <div style="margin:1rem 0;padding:1rem;background:var(--cream2);border-radius:var(--radius);border:2px solid var(--peach-light)">
           <p style="font-weight:700;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Your Deposit ($${deposit})</p>
           <p style="font-size:0.85rem;color:var(--gray);margin-bottom:0.75rem">You can pay now or anytime before your party via Manage Booking.</p>
-          <div id="paypalBtnConfirm"></div>
+          <div id="squarePayConfirm"></div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
             ${CONFIG.paymentInfo.venmo ? `<a href="https://venmo.com/${CONFIG.paymentInfo.venmo.handle.replace('@','')}?txn=pay&amount=${deposit}&note=${encodeURIComponent('Peachy Pals ' + result.confirmationCode)}" target="_blank" class="btn btn-outline btn-sm"><i class="fab fa-vimeo-v"></i> Venmo $${deposit}</a>` : ''}
             ${CONFIG.paymentInfo.cashapp ? `<a href="https://cash.app/${CONFIG.paymentInfo.cashapp.handle}/$${ deposit}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-dollar-sign"></i> Cash App $${deposit}</a>` : ''}
@@ -573,7 +575,7 @@ async function submitBooking() {
     bookingStep(5);
 
     // Render PayPal button if configured
-    renderPayPalButton('paypalBtnConfirm', deposit, result.confirmationCode, result.id || booking.id);
+    renderSquarePayButton('squarePayConfirm', deposit, result.confirmationCode, result.id || booking.id);
 
     // Send email notification
     sendBookingEmail(booking, result.confirmationCode, total, deposit);
@@ -872,7 +874,7 @@ function renderBookingCard(b, isAdmin) {
       ${!b.depositPaid && b.status !== 'cancelled' && !isAdmin ? `
         <div class="booking-pay-section">
           <p style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Deposit — $${b.depositAmount || 0}</p>
-          <div id="paypalBtn_${b.id}"></div>
+          <div id="squarePay_${b.id}"></div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
             <a href="https://venmo.com/${(CONFIG.paymentInfo.venmo?.handle || '').replace('@','')}?txn=pay&amount=${b.depositAmount}&note=${encodeURIComponent('Peachy Pals ' + (b.confirmationCode || ''))}" target="_blank" class="btn btn-outline btn-sm"><i class="fab fa-vimeo-v"></i> Venmo</a>
             <a href="https://cash.app/${CONFIG.paymentInfo.cashapp?.handle || ''}/${b.depositAmount}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-dollar-sign"></i> Cash App</a>
@@ -1836,35 +1838,82 @@ function resetMembershipForm() {
 }
 
 // ==========================================
-// PAYPAL & EMAIL
+// SQUARE PAYMENTS & EMAIL
 // ==========================================
-function renderPayPalButton(containerId, amount, confirmCode, bookingId) {
-  if (!CONFIG.paypalClientId || typeof paypal === 'undefined') return;
+let squareCard = null;
+
+async function renderSquarePayButton(containerId, amount, confirmCode, bookingId) {
+  if (!CONFIG.squareAppId || !CONFIG.squareLocationId) return;
   const container = document.getElementById(containerId);
   if (!container) return;
+  if (typeof Square === 'undefined') return;
+
+  container.innerHTML = `
+    <div id="sq-card-${containerId}" style="margin-bottom:0.5rem"></div>
+    <button class="btn btn-primary btn-sm" id="sq-pay-${containerId}" style="width:100%" onclick="processSquarePayment('${containerId}', ${amount}, '${confirmCode}', '${bookingId}')">
+      <i class="fas fa-lock"></i> Pay $${amount.toFixed(2)} with Card
+    </button>
+    <p id="sq-status-${containerId}" style="display:none;margin-top:0.5rem;font-size:0.85rem"></p>
+  `;
+
   try {
-    paypal.Buttons({
-      style: { layout: 'horizontal', color: 'gold', shape: 'pill', label: 'pay', height: 40 },
-      createOrder: (data, actions) => actions.order.create({
-        purchase_units: [{
-          amount: { value: amount.toFixed(2) },
-          description: 'Peachy Pals Playland — Deposit ' + confirmCode
-        }]
-      }),
-      onApprove: async (data, actions) => {
-        const details = await actions.order.capture();
-        if (bookingId) {
-          await DataStore.updateBooking(bookingId, { depositPaid: true, paypalOrderId: details.id });
-        }
-        showToast('Payment successful! Deposit paid.', 'success');
-        container.innerHTML = '<p style="color:var(--bamboo);font-weight:700"><i class="fas fa-check-circle"></i> Deposit Paid</p>';
-      },
-      onError: (err) => {
-        console.error('PayPal error:', err);
-        showToast('Payment failed. Please try again.', 'error');
-      }
-    }).render('#' + containerId);
-  } catch (e) { console.warn('PayPal render failed:', e); }
+    const payments = Square.payments(CONFIG.squareAppId, CONFIG.squareLocationId);
+    squareCard = await payments.card();
+    await squareCard.attach('#sq-card-' + containerId);
+  } catch (e) {
+    console.warn('Square card form failed:', e);
+    container.innerHTML = '<p style="color:var(--gray);font-size:0.85rem">Card payment form unavailable. Use Venmo or Cash App below.</p>';
+  }
+}
+
+async function processSquarePayment(containerId, amount, confirmCode, bookingId) {
+  if (!squareCard) return;
+  const btn = document.getElementById('sq-pay-' + containerId);
+  const status = document.getElementById('sq-status-' + containerId);
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+  status.style.display = 'block';
+  status.style.color = 'var(--gray)';
+  status.textContent = 'Tokenizing card...';
+
+  try {
+    const result = await squareCard.tokenize();
+    if (result.status !== 'OK') {
+      throw new Error(result.errors?.[0]?.message || 'Card tokenization failed');
+    }
+
+    status.textContent = 'Processing payment...';
+    const resp = await fetch(CONFIG.squarePayEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nonce: result.token,
+        amount: Math.round(amount * 100),
+        currency: 'USD',
+        confirmationCode: confirmCode,
+        bookingId: bookingId
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Payment failed');
+
+    if (bookingId) {
+      await DataStore.updateBooking(bookingId, { depositPaid: true, squarePaymentId: data.paymentId || '' });
+    }
+    btn.style.display = 'none';
+    status.style.color = 'var(--bamboo)';
+    status.innerHTML = '<strong><i class="fas fa-check-circle"></i> Payment successful! Deposit paid.</strong>';
+    showToast('Payment successful!', 'success');
+    const cardContainer = document.getElementById('sq-card-' + containerId);
+    if (cardContainer) cardContainer.style.display = 'none';
+  } catch (err) {
+    console.error('Square payment error:', err);
+    status.style.color = '#e53935';
+    status.textContent = err.message || 'Payment failed. Please try again.';
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fas fa-lock"></i> Pay $${amount.toFixed(2)} with Card`;
+  }
 }
 
 async function sendBookingEmail(booking, confirmCode, total, deposit) {

@@ -721,12 +721,11 @@
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <script src="js/app.js"></script>
   <script>
-    // PayPal SDK — loads only if client ID is configured
+    // Square Web Payments SDK — loads only if app ID is configured
     (function() {
-      var cid = typeof CONFIG !== 'undefined' && CONFIG.paypalClientId;
-      if (cid) {
+      if (typeof CONFIG !== 'undefined' && CONFIG.squareAppId) {
         var s = document.createElement('script');
-        s.src = 'https://www.paypal.com/sdk/js?client-id=' + cid + '&currency=USD';
+        s.src = 'https://web.squarecdn.com/v1/square.js';
         document.head.appendChild(s);
       }
     })();
