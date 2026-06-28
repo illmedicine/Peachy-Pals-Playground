@@ -380,6 +380,55 @@ const DataStore = {
     }
   },
 
+  // --- SERVICES (Homepage cards) ---
+  async getServices() {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('services').orderByChild('sortOrder').once('value');
+      return this._snapToArray(snap);
+    }
+    return JSON.parse(localStorage.getItem('pp_services') || '[]');
+  },
+
+  async saveService(svc) {
+    if (isFirebaseConfigured) {
+      if (svc.id) {
+        const id = svc.id;
+        const data = { ...svc }; delete data.id;
+        await this._ref('services/' + id).set(data);
+        return id;
+      }
+      const data = { ...svc }; delete data.id;
+      const ref = this._ref('services').push();
+      await ref.set(data);
+      return ref.key;
+    }
+    const services = JSON.parse(localStorage.getItem('pp_services') || '[]');
+    if (svc.id) {
+      const idx = services.findIndex(s => s.id === svc.id);
+      if (idx >= 0) services[idx] = svc;
+    } else {
+      svc.id = 'svc_' + Date.now();
+      services.push(svc);
+    }
+    localStorage.setItem('pp_services', JSON.stringify(services));
+    return svc.id;
+  },
+
+  async seedServices() {
+    const existing = await this.getServices();
+    if (existing.length > 0) return;
+    const defaults = [
+      { title: "Open Play", price: "$12", priceNote: "/ 2 hours", description: "Flexible playtime in our indoor play space. $18 for unlimited play. Adults free. Grippy socks required.", imageUrl: "https://images.unsplash.com/photo-1566140967404-b8b3932483f5?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "", buttonAction: "", sortOrder: 1 },
+      { title: "Birthday Parties", price: "From $229", priceNote: "", description: "Private party room, dedicated playtime, staff support & full cleanup.", imageUrl: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&h=300&fit=crop&auto=format", featured: true, buttonText: "View Packages", buttonAction: "navigate('packages')", sortOrder: 2 },
+      { title: "Memberships", price: "From $55", priceNote: "/mo", description: "Unlimited visits! Monthly: $65/child. Annual: $55/child. +$20/mo per additional sibling.", imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "View Memberships", buttonAction: "navigate('memberships')", sortOrder: 3 },
+      { title: "Field Trips", price: "", priceNote: "", description: "Schools, daycares, camps & homeschool groups welcome for structured group play.", imageUrl: "https://images.unsplash.com/photo-1472162072942-cd5147eb3902?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "Inquire Now", buttonAction: "mailto:info@peachypalsplay.com", sortOrder: 4 },
+      { title: "Balloon Bar", price: "From $3", priceNote: "", description: "Helium fill-up $3–$5. Mini bundles from $15. Custom bouquets from $35. Characters from $10.", imageUrl: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "", buttonAction: "", sortOrder: 5 },
+      { title: "Digital Waiver", price: "", priceNote: "", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "Sign Waiver", buttonAction: "https://peachypals.pcsparty.com/sign/", sortOrder: 6 }
+    ];
+    for (const svc of defaults) await this.saveService(svc);
+    console.log("✅ Default services seeded");
+  },
+
   // --- SEED DEFAULT PACKAGES ---
   async seedDefaults() {
     const existing = await this.getPackages();

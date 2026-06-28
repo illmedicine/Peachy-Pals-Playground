@@ -818,6 +818,28 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
 .admin-pkg-body .price { font-size: 1.3rem; font-weight: 900; color: var(--peach-dark); }
 .admin-pkg-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
 
+/* Admin: Services */
+.admin-services-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem;
+}
+.admin-svc-card {
+  background: var(--white); border-radius: var(--radius-lg); overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.admin-svc-img {
+  height: 140px; background-size: cover; background-position: center;
+  position: relative; cursor: pointer;
+}
+.admin-svc-img-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 0.95rem; gap: 0.5rem;
+  opacity: 0; transition: var(--transition);
+}
+.admin-svc-img:hover .admin-svc-img-overlay { opacity: 1; }
+.admin-svc-body { padding: 1rem; }
+.admin-svc-body h3 { margin-bottom: 0.25rem; font-size: 1.1rem; }
+
 .admin-cal-wrap {
   display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
 }

@@ -162,6 +162,38 @@ function initLeaves() {
 }
 
 // ==========================================
+// SERVICES RENDERING (Homepage cards)
+// ==========================================
+let services = [];
+
+async function renderServices() {
+  services = await DataStore.getServices();
+  const grid = document.getElementById('servicesGrid');
+  if (!grid) return;
+  grid.innerHTML = services.map(svc => {
+    const imgStyle = svc.imageUrl ? `background-image: url('${escapeHtml(svc.imageUrl)}')` : 'background: var(--peach-light)';
+    let btnHtml = '';
+    if (svc.buttonText && svc.buttonAction) {
+      if (svc.buttonAction.startsWith('mailto:') || svc.buttonAction.startsWith('http')) {
+        btnHtml = `<a href="${escapeHtml(svc.buttonAction)}" ${svc.buttonAction.startsWith('http') ? 'target="_blank" rel="noopener"' : ''} class="btn ${svc.featured ? 'btn-primary' : 'btn-outline'} btn-sm">${escapeHtml(svc.buttonText)}</a>`;
+      } else {
+        btnHtml = `<button class="btn ${svc.featured ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="${escapeHtml(svc.buttonAction)}">${escapeHtml(svc.buttonText)}</button>`;
+      }
+    }
+    return `
+      <div class="svc-card ${svc.featured ? 'featured' : ''}">
+        ${svc.featured ? '<div class="svc-badge">Most Popular</div>' : ''}
+        <div class="svc-img" style="${imgStyle}"></div>
+        <h3>${escapeHtml(svc.title)}</h3>
+        ${svc.price ? `<div class="svc-price">${escapeHtml(svc.price)}${svc.priceNote ? '<small>' + escapeHtml(svc.priceNote) + '</small>' : ''}</div>` : ''}
+        <p>${escapeHtml(svc.description || '')}</p>
+        ${btnHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+// ==========================================
 // PACKAGES RENDERING
 // ==========================================
 function renderPackageCard(pkg, selectable = false) {
@@ -869,6 +901,7 @@ function adminSwitchTab(tabId) {
   document.querySelectorAll('.admin-panel').forEach(p => p.classList.toggle('active', p.id === tabId));
   if (tabId === 'adminBookings') loadAdminBookings();
   if (tabId === 'adminPackages') loadAdminPackages();
+  if (tabId === 'adminServices') loadAdminServices();
   if (tabId === 'adminAvailability') initAdminCalendar();
 }
 
@@ -1100,6 +1133,106 @@ async function deletePackageAdmin(id) {
   showToast('Package deleted', 'info');
   loadAdminPackages();
   renderHomePackages();
+}
+
+// Admin: Services
+async function loadAdminServices() {
+  services = await DataStore.getServices();
+  const list = document.getElementById('adminServicesList');
+  list.innerHTML = services.map(svc => {
+    const imgStyle = svc.imageUrl ? `background-image:url('${escapeHtml(svc.imageUrl)}');background-size:cover;background-position:center` : 'background:var(--peach-light)';
+    return `
+      <div class="admin-svc-card">
+        <div class="admin-svc-img" style="${imgStyle}" onclick="triggerSvcImageUpload('${svc.id}')">
+          <div class="admin-svc-img-overlay"><i class="fas fa-camera"></i> Change Photo</div>
+          <input type="file" id="svcFile_${svc.id}" accept="image/*" style="display:none" onchange="uploadSvcImage('${svc.id}', this)">
+        </div>
+        <div class="admin-svc-body">
+          <h3>${escapeHtml(svc.title)}</h3>
+          ${svc.price ? `<div style="color:var(--peach-dark);font-weight:800">${escapeHtml(svc.price)} ${escapeHtml(svc.priceNote || '')}</div>` : ''}
+          <p style="font-size:0.8rem;color:var(--gray);margin-top:0.25rem">${escapeHtml((svc.description || '').substring(0, 60))}...</p>
+          <div style="margin-top:0.5rem;display:flex;gap:0.5rem">
+            <button class="btn btn-outline btn-sm" onclick="openServiceEditor('${svc.id}')"><i class="fas fa-edit"></i> Edit</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function triggerSvcImageUpload(svcId) {
+  document.getElementById('svcFile_' + svcId).click();
+}
+
+async function uploadSvcImage(svcId, input) {
+  if (!input.files || !input.files[0]) return;
+  const svc = services.find(s => s.id === svcId);
+  if (!svc) return;
+  try {
+    showToast('Compressing image...', 'info');
+    const imageUrl = await DataStore.processAndUploadImage(input.files[0], (msg) => {
+      showToast(msg, 'info');
+    });
+    svc.imageUrl = imageUrl;
+    await DataStore.saveService(svc);
+    showToast('Photo updated!', 'success');
+    loadAdminServices();
+    renderServices();
+  } catch (err) {
+    console.error('Service image upload failed:', err);
+    showToast('Image upload failed: ' + err.message, 'error');
+  }
+}
+
+function openServiceEditor(svcId) {
+  const svc = services.find(s => s.id === svcId);
+  if (!svc) return;
+  const html = `
+    <h2>Edit Service Card</h2>
+    <form onsubmit="return false" style="margin-top:1rem">
+      <div class="form-group"><label>Title *</label><input type="text" id="svcTitle" value="${escapeHtml(svc.title)}"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Price Text</label><input type="text" id="svcPrice" value="${escapeHtml(svc.price || '')}" placeholder="e.g. $12 or From $229"></div>
+        <div class="form-group"><label>Price Note</label><input type="text" id="svcPriceNote" value="${escapeHtml(svc.priceNote || '')}" placeholder="e.g. / 2 hours or /mo"></div>
+      </div>
+      <div class="form-group"><label>Description</label><textarea id="svcDesc" rows="3">${escapeHtml(svc.description || '')}</textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Button Text</label><input type="text" id="svcBtnText" value="${escapeHtml(svc.buttonText || '')}" placeholder="e.g. View Packages"></div>
+        <div class="form-group"><label>Button Action</label><input type="text" id="svcBtnAction" value="${escapeHtml(svc.buttonAction || '')}" placeholder="navigate('packages') or URL"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Sort Order</label><input type="number" id="svcSort" value="${svc.sortOrder || 0}"></div>
+        <div class="form-group"><label><input type="checkbox" id="svcFeatured" ${svc.featured ? 'checked' : ''}> Featured (Most Popular badge)</label></div>
+      </div>
+      <div style="display:flex;gap:1rem;margin-top:1rem">
+        <button class="btn btn-primary" onclick="saveServiceAdmin('${svcId}')"><i class="fas fa-save"></i> Save</button>
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  `;
+  openModal(html);
+}
+
+async function saveServiceAdmin(svcId) {
+  const svc = services.find(s => s.id === svcId);
+  if (!svc) return;
+  svc.title = document.getElementById('svcTitle').value.trim();
+  svc.price = document.getElementById('svcPrice').value.trim();
+  svc.priceNote = document.getElementById('svcPriceNote').value.trim();
+  svc.description = document.getElementById('svcDesc').value.trim();
+  svc.buttonText = document.getElementById('svcBtnText').value.trim();
+  svc.buttonAction = document.getElementById('svcBtnAction').value.trim();
+  svc.sortOrder = parseInt(document.getElementById('svcSort').value) || 0;
+  svc.featured = document.getElementById('svcFeatured').checked;
+  if (!svc.title) { showToast('Title is required', 'error'); return; }
+  try {
+    await DataStore.saveService(svc);
+    showToast('Service card saved!', 'success');
+    closeModal();
+    loadAdminServices();
+    renderServices();
+  } catch (err) {
+    showToast('Error saving service.', 'error');
+  }
 }
 
 // Admin: Availability Calendar
@@ -1563,7 +1696,9 @@ async function init() {
   await DataStore.seedDefaults();
   await DataStore.migratePackages();
 
-  // Render home packages
+  // Seed and render services + packages
+  await DataStore.seedServices();
+  await renderServices();
   await renderHomePackages();
 
   // Initialize floating leaves
