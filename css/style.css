@@ -844,6 +844,38 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
 @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateX(100%); } }
 
 /* ==========================================
+   PWA INSTALL BANNER
+   ========================================== */
+.pwa-install-banner {
+  position: fixed; bottom: -120px; left: 50%; transform: translateX(-50%);
+  z-index: 10000; width: calc(100% - 2rem); max-width: 480px;
+  background: var(--white); border-radius: var(--radius-lg);
+  box-shadow: 0 -4px 30px rgba(62,39,35,0.2); padding: 1rem 1.25rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
+  transition: bottom 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid var(--peach-light);
+}
+.pwa-install-banner.visible { bottom: 1rem; }
+.pwa-install-content {
+  display: flex; align-items: center; gap: 0.75rem;
+}
+.pwa-install-icon {
+  width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+}
+.pwa-install-text {
+  display: flex; flex-direction: column; gap: 0.15rem;
+}
+.pwa-install-text strong {
+  font-family: var(--font-heading); font-size: 1.05rem; color: var(--dark);
+}
+.pwa-install-text span {
+  font-size: 0.8rem; color: var(--gray);
+}
+.pwa-install-actions {
+  display: flex; gap: 0.5rem; justify-content: flex-end;
+}
+
+/* ==========================================
    CONFETTI
    ========================================== */
 #confetti-container {

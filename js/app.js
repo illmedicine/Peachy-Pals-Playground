@@ -967,14 +967,14 @@ async function savePackageAdmin(pkgId) {
     try {
       const progressEl = document.getElementById('pkgUploadProgress');
       progressEl.style.display = 'block';
-      document.getElementById('pkgUploadText').textContent = 'Uploading image...';
-      document.getElementById('pkgUploadBar').style.width = '50%';
-      imageUrl = await DataStore.uploadImage(fileInput.files[0], 'packages');
-      document.getElementById('pkgUploadBar').style.width = '100%';
-      document.getElementById('pkgUploadText').textContent = 'Upload complete!';
+      document.getElementById('pkgUploadText').textContent = 'Compressing image...';
+      document.getElementById('pkgUploadBar').style.width = '30%';
+      imageUrl = await DataStore.compressImage(fileInput.files[0]);
+      document.getElementById('pkgUploadBar').style.width = '80%';
+      document.getElementById('pkgUploadText').textContent = 'Saving...';
     } catch (err) {
-      console.error('Image upload failed:', err);
-      showToast('Image upload failed. Check Firebase Storage rules.', 'error');
+      console.error('Image processing failed:', err);
+      showToast('Image processing failed. Try a smaller image.', 'error');
       document.getElementById('pkgUploadProgress').style.display = 'none';
       return;
     }
@@ -1514,6 +1514,74 @@ async function init() {
 
 // Start the app
 document.addEventListener('DOMContentLoaded', init);
+
+// ==========================================
+// PWA — SERVICE WORKER & INSTALL PROMPT
+// ==========================================
+let deferredInstallPrompt = null;
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showInstallBanner();
+});
+
+function showInstallBanner() {
+  if (localStorage.getItem('pp_pwa_dismissed')) return;
+  const banner = document.getElementById('pwaInstallBanner');
+  if (banner) {
+    setTimeout(() => banner.classList.add('visible'), 2000);
+  }
+}
+
+function installPWA() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(result => {
+      if (result.outcome === 'accepted') {
+        showToast('App installed! Find it on your home screen.', 'success');
+      }
+      deferredInstallPrompt = null;
+      document.getElementById('pwaInstallBanner').classList.remove('visible');
+    });
+  }
+}
+
+function dismissInstallBanner() {
+  document.getElementById('pwaInstallBanner').classList.remove('visible');
+  localStorage.setItem('pp_pwa_dismissed', Date.now());
+}
+
+// iOS install hint (Safari doesn't fire beforeinstallprompt)
+(function checkIOSInstall() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.navigator.standalone === true;
+  if (isIOS && !isStandalone && !localStorage.getItem('pp_pwa_dismissed')) {
+    setTimeout(() => {
+      const banner = document.getElementById('pwaInstallBanner');
+      if (!banner) return;
+      document.getElementById('pwaInstallBtn').textContent = 'How To';
+      document.getElementById('pwaInstallBtn').onclick = function() {
+        openModal(`
+          <h2 style="margin-bottom:1rem"><i class="fas fa-mobile-alt" style="color:var(--peach)"></i> Install Peachy Pals</h2>
+          <p style="margin-bottom:1rem">Add Peachy Pals to your iPhone home screen:</p>
+          <ol style="text-align:left;line-height:2;padding-left:1.5rem">
+            <li>Tap the <strong>Share</strong> button <i class="fas fa-share-square"></i> at the bottom of Safari</li>
+            <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+            <li>Tap <strong>"Add"</strong> in the top right</li>
+          </ol>
+          <p style="margin-top:1rem;color:var(--gray);font-size:0.9rem">The app will appear on your home screen just like a regular app!</p>
+          <button class="btn btn-primary" style="margin-top:1rem" onclick="closeModal();dismissInstallBanner()">Got It</button>
+        `);
+      };
+      banner.classList.add('visible');
+    }, 3000);
+  }
+})();
 
 // ==========================================
 // HERO IMAGE SLIDER

@@ -1,0 +1,26 @@
+{
+  "name": "Peachy Pals Playland",
+  "short_name": "Peachy Pals",
+  "description": "Indoor play, birthday parties & family fun for ages 6mo–8yr in Cartersville, GA",
+  "start_url": "/Peachy-Pals-Playground/",
+  "scope": "/Peachy-Pals-Playground/",
+  "display": "standalone",
+  "background_color": "#FFFDE7",
+  "theme_color": "#FF7043",
+  "orientation": "portrait-primary",
+  "categories": ["entertainment", "kids"],
+  "icons": [
+    {
+      "src": "images/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "images/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

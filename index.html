@@ -6,6 +6,12 @@
   <title>Peachy Pals Playland — Indoor Play & Birthday Parties | Cartersville, GA</title>
   <meta name="description" content="Cartersville's favorite indoor play space for kids 6mo–8yr. Birthday parties, open play, memberships, field trips & more!">
   <link rel="icon" type="image/png" href="images/logo.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#FF7043">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Peachy Pals">
+  <link rel="apple-touch-icon" href="images/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -20,6 +26,21 @@
 
   <!-- ========== TOAST NOTIFICATIONS ========== -->
   <div id="toast-container"></div>
+
+  <!-- ========== PWA INSTALL BANNER ========== -->
+  <div class="pwa-install-banner" id="pwaInstallBanner">
+    <div class="pwa-install-content">
+      <img src="images/logo.png" alt="Peachy Pals" class="pwa-install-icon" onerror="this.style.display='none'">
+      <div class="pwa-install-text">
+        <strong>Install Peachy Pals</strong>
+        <span>Add to your home screen for quick access!</span>
+      </div>
+    </div>
+    <div class="pwa-install-actions">
+      <button class="btn btn-primary btn-sm" id="pwaInstallBtn" onclick="installPWA()">Install</button>
+      <button class="btn btn-outline btn-sm" onclick="dismissInstallBanner()">Not Now</button>
+    </div>
+  </div>
 
   <!-- ========== NAVIGATION ========== -->
   <nav class="main-nav" id="mainNav">

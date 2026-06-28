@@ -248,16 +248,27 @@ const DataStore = {
     localStorage.setItem('pp_blocked', JSON.stringify(dates));
   },
 
-  // --- IMAGE UPLOAD ---
-  async uploadImage(file, folder = 'packages') {
-    if (!isFirebaseConfigured || !storage) {
-      throw new Error('Firebase Storage not available');
-    }
-    const ext = file.name.split('.').pop().toLowerCase();
-    const filename = folder + '_' + Date.now() + '.' + ext;
-    const ref = storage.ref(folder + '/' + filename);
-    const snapshot = await ref.put(file);
-    return await snapshot.ref.getDownloadURL();
+  // --- IMAGE PROCESSING ---
+  compressImage(file, maxWidth = 800, quality = 0.75) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
   },
 
   // --- PACKAGE FIELD UPDATE ---
