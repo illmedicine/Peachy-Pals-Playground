@@ -1212,16 +1212,15 @@ async function loadAdminServices() {
     const imgStyle = svc.imageUrl ? `background-image:url('${escapeHtml(svc.imageUrl)}');background-size:cover;background-position:center` : 'background:var(--peach-light)';
     return `
       <div class="admin-svc-card">
-        <div class="admin-svc-img" style="${imgStyle}" onclick="triggerSvcImageUpload('${svc.id}')">
-          <div class="admin-svc-img-overlay"><i class="fas fa-camera"></i> Change Photo</div>
-          <input type="file" id="svcFile_${svc.id}" accept="image/*" style="display:none" onchange="uploadSvcImage('${svc.id}', this)">
+        <div class="admin-svc-img" style="${imgStyle}">
+          <div class="admin-svc-img-overlay"><i class="fas fa-camera"></i></div>
         </div>
         <div class="admin-svc-body">
           <h3>${escapeHtml(svc.title)}</h3>
           ${svc.price ? `<div style="color:var(--peach-dark);font-weight:800">${escapeHtml(svc.price)} ${escapeHtml(svc.priceNote || '')}</div>` : ''}
           <p style="font-size:0.8rem;color:var(--gray);margin-top:0.25rem">${escapeHtml((svc.description || '').substring(0, 60))}...</p>
-          <div style="margin-top:0.5rem;display:flex;gap:0.5rem">
-            <button class="btn btn-outline btn-sm" onclick="openServiceEditor('${svc.id}')"><i class="fas fa-edit"></i> Edit</button>
+          <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
+            <button class="btn btn-primary btn-sm" onclick="openServiceEditor('${svc.id}')"><i class="fas fa-edit"></i> Edit Card</button>
           </div>
         </div>
       </div>`;
@@ -1255,9 +1254,16 @@ async function uploadSvcImage(svcId, input) {
 function openServiceEditor(svcId) {
   const svc = services.find(s => s.id === svcId);
   if (!svc) return;
+  const imgPreviewStyle = svc.imageUrl ? `background-image:url('${escapeHtml(svc.imageUrl)}');background-size:cover;background-position:center` : 'background:var(--gray-lighter)';
   const html = `
     <h2>Edit Service Card</h2>
     <form onsubmit="return false" style="margin-top:1rem">
+      <div class="form-group">
+        <label>Service Image</label>
+        <div id="svcImagePreview" style="width:100%;height:140px;border-radius:12px;${imgPreviewStyle};margin-bottom:0.5rem;display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:0.85rem">${svc.imageUrl ? '' : 'No image'}</div>
+        <input type="file" id="svcImageFile" accept="image/*" onchange="previewSvcImage(this)" style="margin-bottom:0.5rem">
+        <div id="svcUploadProgress" style="display:none;margin-bottom:0.5rem"><div style="background:var(--gray-lighter);border-radius:8px;overflow:hidden;height:6px"><div id="svcUploadBar" style="height:100%;background:var(--peach);width:0%;transition:width 0.3s"></div></div><small id="svcUploadText" style="color:var(--gray)">Processing...</small></div>
+      </div>
       <div class="form-group"><label>Title *</label><input type="text" id="svcTitle" value="${escapeHtml(svc.title)}"></div>
       <div class="form-row">
         <div class="form-group"><label>Price Text</label><input type="text" id="svcPrice" value="${escapeHtml(svc.price || '')}" placeholder="e.g. $12 or From $229"></div>
@@ -1281,9 +1287,40 @@ function openServiceEditor(svcId) {
   openModal(html);
 }
 
+function previewSvcImage(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const preview = document.getElementById('svcImagePreview');
+    preview.style.backgroundImage = `url('${e.target.result}')`;
+    preview.style.backgroundSize = 'cover';
+    preview.style.backgroundPosition = 'center';
+    preview.textContent = '';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
 async function saveServiceAdmin(svcId) {
   const svc = services.find(s => s.id === svcId);
   if (!svc) return;
+
+  const fileInput = document.getElementById('svcImageFile');
+  if (fileInput.files && fileInput.files[0]) {
+    const progressEl = document.getElementById('svcUploadProgress');
+    try {
+      progressEl.style.display = 'block';
+      svc.imageUrl = await DataStore.processAndUploadImage(fileInput.files[0], (msg, pct) => {
+        document.getElementById('svcUploadText').textContent = msg;
+        document.getElementById('svcUploadBar').style.width = pct + '%';
+      });
+    } catch (err) {
+      console.error('Service image upload failed:', err);
+      showToast(err.message || 'Image upload failed.', 'error');
+      progressEl.style.display = 'none';
+      return;
+    }
+  }
+
   svc.title = document.getElementById('svcTitle').value.trim();
   svc.price = document.getElementById('svcPrice').value.trim();
   svc.priceNote = document.getElementById('svcPriceNote').value.trim();

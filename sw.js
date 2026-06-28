@@ -1,4 +1,4 @@
-const CACHE_NAME = 'peachy-pals-v2';
+const CACHE_NAME = 'peachy-pals-v3';
 const ASSETS = [
   './',
   './index.html',
