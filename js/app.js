@@ -964,18 +964,17 @@ async function savePackageAdmin(pkgId) {
   let imageUrl = document.getElementById('pkgImageUrl').value.trim();
   const fileInput = document.getElementById('pkgImageFile');
   if (fileInput.files && fileInput.files[0]) {
+    const progressEl = document.getElementById('pkgUploadProgress');
     try {
-      const progressEl = document.getElementById('pkgUploadProgress');
       progressEl.style.display = 'block';
-      document.getElementById('pkgUploadText').textContent = 'Compressing image...';
-      document.getElementById('pkgUploadBar').style.width = '30%';
-      imageUrl = await DataStore.compressImage(fileInput.files[0]);
-      document.getElementById('pkgUploadBar').style.width = '80%';
-      document.getElementById('pkgUploadText').textContent = 'Saving...';
+      imageUrl = await DataStore.processAndUploadImage(fileInput.files[0], (msg, pct) => {
+        document.getElementById('pkgUploadText').textContent = msg;
+        document.getElementById('pkgUploadBar').style.width = pct + '%';
+      });
     } catch (err) {
-      console.error('Image processing failed:', err);
-      showToast('Image processing failed. Try a smaller image.', 'error');
-      document.getElementById('pkgUploadProgress').style.display = 'none';
+      console.error('Image upload failed:', err);
+      showToast(err.message || 'Image upload failed. Try a smaller JPG or PNG.', 'error');
+      progressEl.style.display = 'none';
       return;
     }
   }

@@ -248,27 +248,75 @@ const DataStore = {
     localStorage.setItem('pp_blocked', JSON.stringify(dates));
   },
 
-  // --- IMAGE PROCESSING ---
-  compressImage(file, maxWidth = 800, quality = 0.75) {
+  // --- IMAGE HANDLING ---
+  _compressImage(file, maxWidth = 600, quality = 0.65) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onerror = () => reject(new Error('Could not read file'));
       reader.onload = function(e) {
         const img = new Image();
-        img.onerror = () => reject(new Error('Failed to load image'));
+        img.onerror = () => reject(new Error('Could not load image — try JPG or PNG'));
         img.onload = function() {
-          const canvas = document.createElement('canvas');
-          let w = img.width, h = img.height;
-          if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
-          canvas.width = w;
-          canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', quality));
+          try {
+            const canvas = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            if (w > maxWidth) { h = Math.round(h * maxWidth / w); w = maxWidth; }
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            const dataUrl = canvas.toDataURL('image/jpeg', quality);
+            resolve(dataUrl);
+          } catch (err) {
+            reject(new Error('Image compression failed'));
+          }
         };
         img.src = e.target.result;
       };
       reader.readAsDataURL(file);
     });
+  },
+
+  async processAndUploadImage(file, onProgress) {
+    onProgress('Compressing image...', 20);
+    let compressed;
+    try {
+      compressed = await this._compressImage(file);
+    } catch (err) {
+      throw new Error('Compression failed: ' + err.message);
+    }
+    onProgress('Compressed! Uploading...', 40);
+
+    // Try Firebase Storage first
+    if (isFirebaseConfigured && storage) {
+      try {
+        const ext = 'jpg';
+        const filename = 'packages/pkg_' + Date.now() + '.' + ext;
+        const ref = storage.ref(filename);
+
+        // Convert base64 to blob for upload
+        const resp = await fetch(compressed);
+        const blob = await resp.blob();
+
+        const uploadPromise = ref.put(blob);
+        const timeoutPromise = new Promise((_, rej) =>
+          setTimeout(() => rej(new Error('timeout')), 15000)
+        );
+        const snapshot = await Promise.race([uploadPromise, timeoutPromise]);
+        onProgress('Getting download URL...', 80);
+        const url = await snapshot.ref.getDownloadURL();
+        onProgress('Done!', 100);
+        console.log('✅ Image uploaded to Firebase Storage');
+        return url;
+      } catch (storageErr) {
+        console.warn('Firebase Storage unavailable, saving image inline:', storageErr.message);
+      }
+    }
+
+    // Fallback: store base64 directly in RTDB
+    onProgress('Saving image data...', 80);
+    console.log('📦 Using inline base64 image (Storage not available)');
+    onProgress('Done!', 100);
+    return compressed;
   },
 
   // --- PACKAGE FIELD UPDATE ---
