@@ -429,6 +429,14 @@ function resetBookingForm() {
 // ==========================================
 // SCHEDULING & CAPACITY
 // ==========================================
+function isDayAvailable(pkg, dayName) {
+  if (!pkg || !pkg.availableDays) return true;
+  const days = Array.isArray(pkg.availableDays) ? pkg.availableDays : Object.values(pkg.availableDays);
+  if (days.length === 0) return true;
+  if (days.includes(dayName)) return true;
+  return days.some(d => typeof d === 'string' && d.includes(dayName));
+}
+
 function formatHourToTime(h) {
   const hour = Math.floor(h);
   const min = Math.round((h % 1) * 60);
@@ -465,19 +473,19 @@ function getSlotCapacity(slotValue, bookings) {
   return CONFIG.maxCapacity - booked;
 }
 
-function getPriceForDate(pkg, dateStr) {
+function getDayName(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
-  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
-  if (CONFIG.weekdayPriceDays.includes(dayName)) return pkg.price;
+  return ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+}
+
+function getPriceForDate(pkg, dateStr) {
+  if (CONFIG.weekdayPriceDays.includes(getDayName(dateStr))) return pkg.price;
   return pkg.weekendPrice || pkg.price;
 }
 
 function isWeekdayRate(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
-  return CONFIG.weekdayPriceDays.includes(dayName);
+  return CONFIG.weekdayPriceDays.includes(getDayName(dateStr));
 }
 
 function findNextAvailableSlot(dateStr, afterSlotValue, partySize) {
@@ -533,7 +541,7 @@ function renderCalendar() {
     const isSelected = selectedDate === dateStr;
 
     const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
-    const pkgAvailable = !selectedPackage?.availableDays || selectedPackage.availableDays.includes(dayName);
+    const pkgAvailable = isDayAvailable(selectedPackage, dayName);
 
     const classes = ['cal-day'];
     if (isPast || !pkgAvailable) classes.push('disabled');

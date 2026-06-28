@@ -276,6 +276,7 @@ const DataStore = {
   async migratePackages() {
     const pkgs = await this.getPackages();
     const allDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const weekdays = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
     for (const pkg of pkgs) {
       const updates = {};
       if (pkg.name === 'Just Peachy') {
@@ -287,6 +288,31 @@ const DataStore = {
         if (!pkg.weekendPrice) updates.weekendPrice = 399;
         if (pkg.availableDays && pkg.availableDays.length < 7) updates.availableDays = allDays;
         if (pkg.subtitle === 'Tues – Thurs') updates.subtitle = 'Any Day';
+      }
+      // Fix range-style availableDays like ["Monday-Friday"]
+      if (pkg.availableDays && pkg.availableDays.length > 0) {
+        const hasRange = pkg.availableDays.some(d => d.includes('-'));
+        if (hasRange) {
+          const expanded = [];
+          for (const entry of pkg.availableDays) {
+            if (entry.includes('-')) {
+              const lower = entry.toLowerCase();
+              if (lower.includes('monday') && lower.includes('friday')) {
+                expanded.push(...weekdays);
+              } else if (lower.includes('monday') && lower.includes('sunday')) {
+                expanded.push(...allDays);
+              } else {
+                expanded.push(...allDays);
+              }
+            } else {
+              expanded.push(entry);
+            }
+          }
+          const unique = [...new Set(expanded)];
+          if (JSON.stringify(unique) !== JSON.stringify(pkg.availableDays)) {
+            updates.availableDays = unique;
+          }
+        }
       }
       if (Object.keys(updates).length > 0) {
         await this.updatePackageFields(pkg.id, updates);
