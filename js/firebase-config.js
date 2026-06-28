@@ -133,6 +133,15 @@ const DataStore = {
     return bookings.filter(b => b.phone.replace(/\D/g, '') === cleanPhone && b.lastName.toLowerCase() === cleanLast);
   },
 
+  async getBookingsByDate(dateStr) {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('bookings').orderByChild('date').equalTo(dateStr).once('value');
+      return this._snapToArray(snap).filter(b => b.status !== 'cancelled');
+    }
+    const bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
+    return bookings.filter(b => b.date === dateStr && b.status !== 'cancelled');
+  },
+
   async getAllBookings() {
     if (isFirebaseConfigured) {
       const snap = await this._ref('bookings').orderByChild('createdAt').once('value');
@@ -232,29 +241,31 @@ const DataStore = {
     const defaults = [
       {
         name: "Just Peachy",
-        subtitle: "Tues – Thurs",
+        subtitle: "Any Day",
         description: "Sweet, simple, and perfect for a playful celebration with your closest crew.",
         price: 229,
+        weekendPrice: 299,
         maxGuests: 8,
         extraGuestFee: 12,
         duration: "2 hours",
-        includes: ["Up to 8 kids", "2-hour private party room", "One drink + one snack per child", "$12 per extra child"],
+        includes: ["Up to 8 kids", "2-hour party", "One drink + one snack per child", "Tue–Thu: $229 / Wknd & Mon: $299", "$12 per extra child"],
         imageUrl: "https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=600&h=400&fit=crop&auto=format",
-        availableDays: ["Tuesday", "Wednesday", "Thursday"],
+        availableDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
         active: true,
         sortOrder: 1
       },
       {
         name: "Peachy Pal",
-        subtitle: "Tues – Thurs",
+        subtitle: "Any Day",
         description: "A classic party setup with everything you need to celebrate in style!",
         price: 379,
+        weekendPrice: 399,
         maxGuests: 16,
         extraGuestFee: 12,
         duration: "2 hours",
-        includes: ["Up to 16 kids", "2-hour private party room", "Everything from Just Peachy", "Goodie bag for each child", "Shirt for birthday pal", "$12 per extra child"],
+        includes: ["Up to 16 kids", "2-hour party", "Everything from Just Peachy", "Goodie bag for each child", "Shirt for birthday pal", "Tue–Thu: $379 / Wknd & Mon: $399", "$12 per extra child"],
         imageUrl: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&h=400&fit=crop&auto=format",
-        availableDays: ["Tuesday", "Wednesday", "Thursday"],
+        availableDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
         active: true,
         sortOrder: 2
       },

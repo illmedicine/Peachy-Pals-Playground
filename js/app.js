@@ -8,7 +8,19 @@
 const CONFIG = {
   adminCode: '4931',
   depositPercent: 50,
-  timeSlots: ['10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'],
+  partyDuration: 2,
+  maxCapacity: 24,
+  hours: {
+    // Mon=1..Sun=0
+    0: { open: 11, close: 18 }, // Sunday
+    1: { open: 10, close: 17 }, // Monday
+    2: { open: 10, close: 17 }, // Tuesday
+    3: { open: 10, close: 17 }, // Wednesday
+    4: { open: 10, close: 17 }, // Thursday
+    5: { open: 11, close: 18 }, // Friday
+    6: { open: 11, close: 18 }  // Saturday
+  },
+  weekdayPriceDays: ['Tuesday', 'Wednesday', 'Thursday'],
   businessPhone: '(770) 387-1020',
   businessEmail: 'info@peachypalsplay.com',
   // Payment handles — owner should update these
@@ -37,6 +49,7 @@ let blockedDates = [];
 let allBookings = [];
 let isAdminLoggedIn = false;
 let selectedMembershipPlan = null;
+let dateBookings = [];
 
 // ==========================================
 // NAVIGATION & ROUTING
@@ -170,7 +183,8 @@ function renderPackageCard(pkg, selectable = false) {
         <h3>${escapeHtml(pkg.name)}</h3>
         ${pkg.subtitle ? `<div class="pkg-card-subtitle">${escapeHtml(pkg.subtitle)}</div>` : ''}
         <p>${escapeHtml(pkg.description || '')}</p>
-        <div class="pkg-card-price">$${pkg.price}<small> ${pkg.maxGuests ? '/ up to ' + pkg.maxGuests + ' guests' : ''}</small></div>
+        <div class="pkg-card-price">${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? 'From $' + pkg.price : '$' + pkg.price}<small> ${pkg.maxGuests ? '/ up to ' + pkg.maxGuests + ' guests' : ''}</small></div>
+        ${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? `<div class="pkg-card-rates"><span>Tue–Thu: $${pkg.price}</span> <span>Wknd/Mon: $${pkg.weekendPrice}</span></div>` : ''}
         ${includesHtml ? `<ul class="pkg-card-includes">${includesHtml}</ul>` : ''}
       </div>
       <div class="pkg-card-footer">
@@ -266,15 +280,47 @@ function validateAndGoStep4() {
       return;
     }
   }
+
+  const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
+  const remaining = getSlotCapacity(selectedTime, dateBookings);
+  if (numKids > remaining) {
+    const next = findNextAvailableSlot(selectedDate, selectedTime, numKids);
+    let msg = `This time slot only has ${remaining} of ${CONFIG.maxCapacity} spots available, but your party has ${numKids} children.`;
+    if (next) {
+      msg += ` The next available slot is ${next.label}. Would you like to switch?`;
+      openModal(`
+        <h2><i class="fas fa-exclamation-triangle" style="color:var(--peach)"></i> Capacity Limit Reached</h2>
+        <p style="margin:1rem 0">${msg}</p>
+        <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="selectTime('${next.value}');closeModal();showToast('Switched to ${next.label}','success')">
+            <i class="fas fa-clock"></i> Switch to ${next.label}
+          </button>
+          <button class="btn btn-outline" onclick="closeModal()">Go Back</button>
+        </div>
+      `);
+    } else {
+      msg += ' Unfortunately, no other time slots are available on this date with enough capacity. Please try a different date.';
+      showToast(msg, 'error');
+    }
+    return;
+  }
+
+  if (numKids > CONFIG.maxCapacity) {
+    showToast(`Maximum facility capacity is ${CONFIG.maxCapacity} children per time slot.`, 'error');
+    return;
+  }
+
   bookingStep(4);
 }
 
 function renderPaymentSummary() {
   const pkg = selectedPackage;
+  const basePrice = getPriceForDate(pkg, selectedDate);
+  const rateType = isWeekdayRate(selectedDate) ? 'Tue–Thu rate' : 'Weekend/Mon rate';
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
   const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
   const extraFee = extraKids * (pkg.extraGuestFee || 0);
-  const total = pkg.price + extraFee;
+  const total = basePrice + extraFee;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
 
   document.getElementById('paymentSummary').innerHTML = `
@@ -283,6 +329,7 @@ function renderPaymentSummary() {
       <tr><td><strong>Package:</strong></td><td>${escapeHtml(pkg.name)}</td></tr>
       <tr><td><strong>Date:</strong></td><td>${formatDateDisplay(selectedDate)}</td></tr>
       <tr><td><strong>Time:</strong></td><td>${selectedTime}</td></tr>
+      <tr><td><strong>Rate:</strong></td><td>${rateType} — $${basePrice} base</td></tr>
       <tr><td><strong>Guest:</strong></td><td>${escapeHtml(document.getElementById('bkChildName').value)}</td></tr>
       <tr><td><strong>Kids:</strong></td><td>${numKids}</td></tr>
       ${extraKids > 0 ? `<tr><td><strong>Extra kids (${extraKids}):</strong></td><td>+$${extraFee}</td></tr>` : ''}
@@ -292,7 +339,6 @@ function renderPaymentSummary() {
     </table>
   `;
 
-  // Payment method listeners
   document.querySelectorAll('input[name="payMethod"]').forEach(radio => {
     radio.addEventListener('change', function() {
       const info = CONFIG.paymentInfo[this.value];
@@ -309,9 +355,10 @@ async function submitBooking() {
   }
 
   const pkg = selectedPackage;
+  const basePrice = getPriceForDate(pkg, selectedDate);
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
   const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
-  const total = pkg.price + extraKids * (pkg.extraGuestFee || 0);
+  const total = basePrice + extraKids * (pkg.extraGuestFee || 0);
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
 
   const booking = {
@@ -380,6 +427,75 @@ function resetBookingForm() {
 }
 
 // ==========================================
+// SCHEDULING & CAPACITY
+// ==========================================
+function formatHourToTime(h) {
+  const hour = Math.floor(h);
+  const min = Math.round((h % 1) * 60);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+  return `${h12}:${String(min).padStart(2, '0')} ${ampm}`;
+}
+
+function getTimeSlotsForDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayOfWeek = date.getDay();
+  const hours = CONFIG.hours[dayOfWeek];
+  const duration = CONFIG.partyDuration;
+  const buffer = 0.5;
+  const slots = [];
+  let t = hours.open;
+  while (t + duration <= hours.close) {
+    const endH = t + duration;
+    slots.push({
+      value: formatHourToTime(t),
+      label: formatHourToTime(t) + ' – ' + formatHourToTime(endH),
+      startHour: t
+    });
+    t += duration + buffer;
+  }
+  return slots;
+}
+
+function getSlotCapacity(slotValue, bookings) {
+  const booked = bookings
+    .filter(b => b.timeSlot === slotValue && b.status !== 'cancelled')
+    .reduce((sum, b) => sum + (b.numberOfKids || 0), 0);
+  return CONFIG.maxCapacity - booked;
+}
+
+function getPriceForDate(pkg, dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+  if (CONFIG.weekdayPriceDays.includes(dayName)) return pkg.price;
+  return pkg.weekendPrice || pkg.price;
+}
+
+function isWeekdayRate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
+  return CONFIG.weekdayPriceDays.includes(dayName);
+}
+
+function findNextAvailableSlot(dateStr, afterSlotValue, partySize) {
+  const slots = getTimeSlotsForDate(dateStr);
+  const blocked = blockedDates.find(b => b.date === dateStr);
+  const blockedSlots = blocked?.blockedSlots || [];
+  let pastCurrent = false;
+  for (const slot of slots) {
+    if (slot.value === afterSlotValue) { pastCurrent = true; continue; }
+    if (!pastCurrent) continue;
+    if (blockedSlots.includes(slot.value)) continue;
+    const remaining = getSlotCapacity(slot.value, dateBookings);
+    if (remaining >= partySize) return slot;
+  }
+  return null;
+}
+
+// ==========================================
 // CALENDAR
 // ==========================================
 async function initCalendar() {
@@ -406,7 +522,6 @@ function renderCalendar() {
   today.setHours(0, 0, 0, 0);
 
   let html = '';
-  // Empty cells before first day
   for (let i = 0; i < firstDay; i++) html += '<div class="cal-day empty"></div>';
 
   for (let d = 1; d <= daysInMonth; d++) {
@@ -417,7 +532,6 @@ function renderCalendar() {
     const isBlocked = blockedDates.some(b => b.date === dateStr && b.blocked);
     const isSelected = selectedDate === dateStr;
 
-    // Check if package is available on this day
     const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][date.getDay()];
     const pkgAvailable = !selectedPackage?.availableDays || selectedPackage.availableDays.includes(dayName);
 
@@ -434,12 +548,15 @@ function renderCalendar() {
   grid.innerHTML = html;
 }
 
-function selectDate(dateStr) {
+async function selectDate(dateStr) {
   selectedDate = dateStr;
   selectedTime = null;
   renderCalendar();
+  dateBookings = await DataStore.getBookingsByDate(dateStr);
   renderTimeSlots();
-  document.getElementById('selectedDateLabel').textContent = formatDateDisplay(dateStr);
+
+  const rateLabel = isWeekdayRate(dateStr) ? '' : ' (weekend rate)';
+  document.getElementById('selectedDateLabel').textContent = formatDateDisplay(dateStr) + rateLabel;
   document.getElementById('btnToStep3').disabled = true;
 }
 
@@ -447,14 +564,33 @@ function renderTimeSlots() {
   const grid = document.getElementById('timeSlotsGrid');
   if (!selectedDate) { grid.innerHTML = ''; return; }
 
+  const slots = getTimeSlotsForDate(selectedDate);
   const blocked = blockedDates.find(b => b.date === selectedDate);
   const blockedSlots = blocked?.blockedSlots || [];
 
-  grid.innerHTML = CONFIG.timeSlots.map(slot => {
-    const isBlocked = blockedSlots.includes(slot);
-    const isSelected = selectedTime === slot;
-    return `<div class="time-slot ${isBlocked ? 'disabled' : ''} ${isSelected ? 'selected' : ''}"
-                 ${!isBlocked ? `onclick="selectTime('${slot}')"` : ''}>${slot}</div>`;
+  grid.innerHTML = slots.map(slot => {
+    const isBlocked = blockedSlots.includes(slot.value);
+    const remaining = getSlotCapacity(slot.value, dateBookings);
+    const isFull = remaining <= 0;
+    const isSelected = selectedTime === slot.value;
+    const disabled = isBlocked || isFull;
+
+    let capacityHtml = '';
+    if (isBlocked) {
+      capacityHtml = '<span class="slot-capacity full">Unavailable</span>';
+    } else if (isFull) {
+      capacityHtml = '<span class="slot-capacity full">Full (0 of ' + CONFIG.maxCapacity + ')</span>';
+    } else if (remaining < CONFIG.maxCapacity) {
+      capacityHtml = '<span class="slot-capacity limited">' + remaining + ' of ' + CONFIG.maxCapacity + ' spots left</span>';
+    } else {
+      capacityHtml = '<span class="slot-capacity open">' + remaining + ' spots available</span>';
+    }
+
+    return `<div class="time-slot ${disabled ? 'disabled' : ''} ${isSelected ? 'selected' : ''}"
+                 ${!disabled ? `onclick="selectTime('${slot.value}')"` : ''}>
+              <span class="slot-time">${slot.label}</span>
+              ${capacityHtml}
+            </div>`;
   }).join('');
 }
 
@@ -733,7 +869,7 @@ async function loadAdminPackages() {
       <div class="admin-pkg-img" style="background-image:url('${escapeHtml(pkg.imageUrl || '')}');background-color:var(--peach-light);background-size:cover;background-position:center"></div>
       <div class="admin-pkg-body">
         <h3>${escapeHtml(pkg.name)}</h3>
-        <div class="price">$${pkg.price}</div>
+        <div class="price">$${pkg.price}${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? ' / $' + pkg.weekendPrice + ' wknd' : ''}</div>
         <p style="font-size:0.85rem;color:var(--gray);margin-top:0.25rem">${escapeHtml(pkg.subtitle || '')} · Max ${pkg.maxGuests || '?'} guests</p>
         <p style="font-size:0.85rem;color:${pkg.active !== false ? 'var(--bamboo)' : '#e53935'};font-weight:700;margin-top:0.25rem">${pkg.active !== false ? '● Active' : '● Inactive'}</p>
         <div class="admin-pkg-actions">
@@ -756,11 +892,14 @@ function openPackageEditor(pkgId) {
       <div class="form-group"><label>Subtitle</label><input type="text" id="pkgSubtitle" value="${escapeHtml(pkg?.subtitle || '')}" placeholder="e.g. Tues – Thurs"></div>
       <div class="form-group"><label>Description</label><textarea id="pkgDesc" rows="2">${escapeHtml(pkg?.description || '')}</textarea></div>
       <div class="form-row">
-        <div class="form-group"><label>Price ($) *</label><input type="number" id="pkgPrice" value="${pkg?.price || ''}" min="0"></div>
-        <div class="form-group"><label>Max Guests *</label><input type="number" id="pkgMaxGuests" value="${pkg?.maxGuests || ''}" min="1"></div>
+        <div class="form-group"><label>Price Tue–Thu ($) *</label><input type="number" id="pkgPrice" value="${pkg?.price || ''}" min="0"></div>
+        <div class="form-group"><label>Price Wknd/Mon ($)</label><input type="number" id="pkgWeekendPrice" value="${pkg?.weekendPrice || ''}" min="0" placeholder="Same as weekday if blank"></div>
       </div>
       <div class="form-row">
+        <div class="form-group"><label>Max Guests *</label><input type="number" id="pkgMaxGuests" value="${pkg?.maxGuests || ''}" min="1"></div>
         <div class="form-group"><label>Extra Guest Fee ($)</label><input type="number" id="pkgExtraFee" value="${pkg?.extraGuestFee || 0}" min="0"></div>
+      </div>
+      <div class="form-row">
         <div class="form-group"><label>Duration</label><input type="text" id="pkgDuration" value="${escapeHtml(pkg?.duration || '2 hours')}"></div>
       </div>
       <div class="form-group"><label>Image URL</label><input type="url" id="pkgImageUrl" value="${escapeHtml(pkg?.imageUrl || '')}" placeholder="https://..."></div>
@@ -789,11 +928,14 @@ async function savePackageAdmin(pkgId) {
     return;
   }
 
+  const weekendPrice = parseFloat(document.getElementById('pkgWeekendPrice').value);
+
   const pkg = {
     name,
     subtitle: document.getElementById('pkgSubtitle').value.trim(),
     description: document.getElementById('pkgDesc').value.trim(),
     price,
+    weekendPrice: isNaN(weekendPrice) ? price : weekendPrice,
     maxGuests,
     extraGuestFee: parseFloat(document.getElementById('pkgExtraFee').value) || 0,
     duration: document.getElementById('pkgDuration').value.trim(),
@@ -901,15 +1043,16 @@ async function toggleBlockDate(dateStr, block) {
 function manageTimeSlots(dateStr) {
   const blocked = blockedDates.find(b => b.date === dateStr);
   const blockedSlots = blocked?.blockedSlots || [];
+  const slots = getTimeSlotsForDate(dateStr);
 
   const html = `
     <h2>Time Slots for ${formatDateDisplay(dateStr)}</h2>
     <p style="margin:0.5rem 0 1rem;color:var(--gray)">Toggle individual time slots on/off:</p>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem">
-      ${CONFIG.timeSlots.map(slot => {
-        const isBlocked = blockedSlots.includes(slot);
+      ${slots.map(slot => {
+        const isBlocked = blockedSlots.includes(slot.value);
         return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem;border-radius:8px;background:${isBlocked ? '#FFEBEE' : '#E8F5E9'};cursor:pointer">
-          <input type="checkbox" class="slot-cb" value="${slot}" ${isBlocked ? 'checked' : ''}> ${slot} ${isBlocked ? '(blocked)' : '(open)'}
+          <input type="checkbox" class="slot-cb" value="${slot.value}" ${isBlocked ? 'checked' : ''}> ${slot.label} ${isBlocked ? '(blocked)' : '(open)'}
         </label>`;
       }).join('')}
     </div>
@@ -920,7 +1063,8 @@ function manageTimeSlots(dateStr) {
 
 async function saveTimeSlots(dateStr) {
   const checkedSlots = [...document.querySelectorAll('.slot-cb:checked')].map(cb => cb.value);
-  const isFullyBlocked = checkedSlots.length === CONFIG.timeSlots.length;
+  const slots = getTimeSlotsForDate(dateStr);
+  const isFullyBlocked = checkedSlots.length === slots.length;
   await DataStore.setBlockedDate(dateStr, isFullyBlocked, checkedSlots, '');
   blockedDates = await DataStore.getBlockedDates();
   closeModal();
