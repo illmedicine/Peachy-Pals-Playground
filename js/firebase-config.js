@@ -10,6 +10,7 @@
 //     "bookings": { ".read": true, ".write": true },
 //     "packages": { ".read": true, ".write": true },
 //     "memberships": { ".read": true, ".write": true },
+//     "services": { ".read": true, ".write": true },
 //     "blockedDates": { ".read": true, ".write": true }
 //   }
 // }

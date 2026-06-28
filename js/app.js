@@ -167,9 +167,18 @@ function initLeaves() {
 let services = [];
 
 async function renderServices() {
-  services = await DataStore.getServices();
+  try {
+    services = await DataStore.getServices();
+  } catch(e) {
+    console.warn('Could not load services:', e);
+    services = [];
+  }
   const grid = document.getElementById('servicesGrid');
   if (!grid) return;
+  if (services.length === 0) {
+    grid.innerHTML = renderFallbackServices();
+    return;
+  }
   grid.innerHTML = services.map(svc => {
     const imgStyle = svc.imageUrl ? `background-image: url('${escapeHtml(svc.imageUrl)}')` : 'background: var(--peach-light)';
     let btnHtml = '';
@@ -190,6 +199,28 @@ async function renderServices() {
         ${btnHtml}
       </div>
     `;
+  }).join('');
+}
+
+function renderFallbackServices() {
+  const fallback = [
+    { title: "Open Play", price: "$12", priceNote: "/ 2 hours", description: "Flexible playtime in our indoor play space. $18 for unlimited play. Adults free. Grippy socks required.", imageUrl: "https://images.unsplash.com/photo-1566140967404-b8b3932483f5?w=600&h=300&fit=crop&auto=format" },
+    { title: "Birthday Parties", price: "From $229", description: "Private party room, dedicated playtime, staff support & full cleanup.", imageUrl: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&h=300&fit=crop&auto=format", featured: true, buttonText: "View Packages", buttonAction: "navigate('packages')" },
+    { title: "Memberships", price: "From $55", priceNote: "/mo", description: "Unlimited visits! Monthly: $65/child. Annual: $55/child. +$20/mo per additional sibling.", imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format", buttonText: "View Memberships", buttonAction: "navigate('memberships')" },
+    { title: "Field Trips", description: "Schools, daycares, camps & homeschool groups welcome for structured group play.", imageUrl: "https://images.unsplash.com/photo-1472162072942-cd5147eb3902?w=600&h=300&fit=crop&auto=format", buttonText: "Inquire Now", buttonAction: "mailto:info@peachypalsplay.com" },
+    { title: "Balloon Bar", price: "From $3", description: "Helium fill-up $3–$5. Mini bundles from $15. Custom bouquets from $35. Characters from $10.", imageUrl: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=600&h=300&fit=crop&auto=format" },
+    { title: "Digital Waiver", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", buttonText: "Sign Waiver", buttonAction: "https://peachypals.pcsparty.com/sign/" }
+  ];
+  return fallback.map(svc => {
+    let btnHtml = '';
+    if (svc.buttonText && svc.buttonAction) {
+      if (svc.buttonAction.startsWith('mailto:') || svc.buttonAction.startsWith('http')) {
+        btnHtml = `<a href="${svc.buttonAction}" ${svc.buttonAction.startsWith('http') ? 'target="_blank" rel="noopener"' : ''} class="btn ${svc.featured ? 'btn-primary' : 'btn-outline'} btn-sm">${svc.buttonText}</a>`;
+      } else {
+        btnHtml = `<button class="btn ${svc.featured ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="${svc.buttonAction}">${svc.buttonText}</button>`;
+      }
+    }
+    return `<div class="svc-card ${svc.featured ? 'featured' : ''}">${svc.featured ? '<div class="svc-badge">Most Popular</div>' : ''}<div class="svc-img" style="background-image:url('${svc.imageUrl}')"></div><h3>${svc.title}</h3>${svc.price ? `<div class="svc-price">${svc.price}${svc.priceNote ? '<small>' + svc.priceNote + '</small>' : ''}</div>` : ''}<p>${svc.description}</p>${btnHtml}</div>`;
   }).join('');
 }
 
@@ -1730,14 +1761,12 @@ function escapeHtml(str) {
 // INITIALIZATION
 // ==========================================
 async function init() {
-  // Seed default packages if empty, then migrate existing ones
-  await DataStore.seedDefaults();
-  await DataStore.migratePackages();
-
-  // Seed and render services + packages
-  await DataStore.seedServices();
-  await renderServices();
-  await renderHomePackages();
+  // Seed and load data — each step wrapped so one failure doesn't block the rest
+  try { await DataStore.seedDefaults(); } catch(e) { console.warn('seedDefaults:', e); }
+  try { await DataStore.migratePackages(); } catch(e) { console.warn('migratePackages:', e); }
+  try { await DataStore.seedServices(); } catch(e) { console.warn('seedServices:', e); }
+  try { await renderServices(); } catch(e) { console.warn('renderServices:', e); }
+  try { await renderHomePackages(); } catch(e) { console.warn('renderHomePackages:', e); }
 
   // Initialize floating leaves
   initLeaves();
