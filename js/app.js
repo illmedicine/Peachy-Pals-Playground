@@ -186,6 +186,7 @@ function renderPackageCard(pkg, selectable = false) {
         <div class="pkg-card-price">${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? 'From $' + pkg.price : '$' + pkg.price}<small> ${pkg.maxGuests ? '/ up to ' + pkg.maxGuests + ' guests' : ''}</small></div>
         ${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? `<div class="pkg-card-rates"><span>Tue–Thu: $${pkg.price}</span> <span>Wknd/Mon: $${pkg.weekendPrice}</span></div>` : ''}
         ${includesHtml ? `<ul class="pkg-card-includes">${includesHtml}</ul>` : ''}
+        ${(pkg.addOns || []).length > 0 ? `<div class="pkg-card-addons"><span class="pkg-addons-label">Add-ons available:</span> ${pkg.addOns.map(a => `<span class="pkg-addon-tag">${escapeHtml(a.name)} +$${a.price}</span>`).join(' ')}</div>` : ''}
       </div>
       <div class="pkg-card-footer">
         ${selectable
@@ -267,6 +268,7 @@ function bookingStep(step) {
 
   // Step-specific initialization
   if (step === 2) initCalendar();
+  if (step === 3) renderBookingAddOns();
   if (step === 4) renderPaymentSummary();
 }
 
@@ -313,6 +315,38 @@ function validateAndGoStep4() {
   bookingStep(4);
 }
 
+function renderBookingAddOns() {
+  const pkg = selectedPackage;
+  const section = document.getElementById('addOnsSection');
+  const list = document.getElementById('addOnsList');
+  const addOns = pkg?.addOns || [];
+  if (addOns.length === 0) {
+    section.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+  section.style.display = 'block';
+  list.innerHTML = addOns.map((a, i) => `
+    <label class="addon-select-item">
+      <input type="checkbox" class="bk-addon-cb" data-index="${i}" data-name="${escapeHtml(a.name)}" data-price="${a.price}">
+      <span class="addon-select-name">${escapeHtml(a.name)}</span>
+      <span class="addon-select-price">+$${a.price.toFixed(2)}</span>
+    </label>
+  `).join('');
+}
+
+function getSelectedAddOns() {
+  const checked = document.querySelectorAll('.bk-addon-cb:checked');
+  return Array.from(checked).map(cb => ({
+    name: cb.dataset.name,
+    price: parseFloat(cb.dataset.price)
+  }));
+}
+
+function getAddOnsTotal() {
+  return getSelectedAddOns().reduce((sum, a) => sum + a.price, 0);
+}
+
 function renderPaymentSummary() {
   const pkg = selectedPackage;
   const basePrice = getPriceForDate(pkg, selectedDate);
@@ -320,8 +354,14 @@ function renderPaymentSummary() {
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
   const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
   const extraFee = extraKids * (pkg.extraGuestFee || 0);
-  const total = basePrice + extraFee;
+  const selectedAddOns = getSelectedAddOns();
+  const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
+  const total = basePrice + extraFee + addOnsTotal;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
+
+  const addOnsHtml = selectedAddOns.map(a =>
+    `<tr><td style="padding-left:1rem;color:var(--gray)">+ ${escapeHtml(a.name)}</td><td>+$${a.price.toFixed(2)}</td></tr>`
+  ).join('');
 
   document.getElementById('paymentSummary').innerHTML = `
     <h3 style="margin-bottom:1rem">Booking Summary</h3>
@@ -333,8 +373,9 @@ function renderPaymentSummary() {
       <tr><td><strong>Guest:</strong></td><td>${escapeHtml(document.getElementById('bkChildName').value)}</td></tr>
       <tr><td><strong>Kids:</strong></td><td>${numKids}</td></tr>
       ${extraKids > 0 ? `<tr><td><strong>Extra kids (${extraKids}):</strong></td><td>+$${extraFee}</td></tr>` : ''}
+      ${addOnsHtml ? `<tr><td><strong>Add-ons:</strong></td><td></td></tr>${addOnsHtml}` : ''}
       <tr><td colspan="2"><hr style="margin:0.5rem 0"></td></tr>
-      <tr><td><strong>Total:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${total}</td></tr>
+      <tr><td><strong>Total:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${total.toFixed(2)}</td></tr>
       <tr><td><strong>Deposit (${CONFIG.depositPercent}%):</strong></td><td style="font-size:1.2rem;font-weight:900;color:var(--teal-dark)">$${deposit}</td></tr>
     </table>
   `;
@@ -358,7 +399,9 @@ async function submitBooking() {
   const basePrice = getPriceForDate(pkg, selectedDate);
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
   const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
-  const total = basePrice + extraKids * (pkg.extraGuestFee || 0);
+  const selectedAddOns = getSelectedAddOns();
+  const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
+  const total = basePrice + extraKids * (pkg.extraGuestFee || 0) + addOnsTotal;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
 
   const booking = {
@@ -375,6 +418,8 @@ async function submitBooking() {
     numberOfKids: numKids,
     numberOfAdults: parseInt(document.getElementById('bkNumAdults').value) || 0,
     specialRequests: document.getElementById('bkRequests').value.trim(),
+    addOns: selectedAddOns,
+    addOnsTotal: addOnsTotal,
     status: 'pending',
     depositPaid: false,
     depositAmount: deposit,
@@ -923,6 +968,17 @@ function openPackageEditor(pkgId) {
         <input type="hidden" id="pkgImageUrl" value="${escapeHtml(pkg?.imageUrl || '')}">
       </div>
       <div class="form-group"><label>Includes (one per line)</label><textarea id="pkgIncludes" rows="4">${(pkg?.includes || []).join('\n')}</textarea></div>
+      <div class="form-group">
+        <label>A La Carte Add-Ons</label>
+        <div id="pkgAddOnsContainer">${(pkg?.addOns || []).map((a, i) => `
+          <div class="addon-row" style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center">
+            <input type="text" class="addon-name" value="${escapeHtml(a.name)}" placeholder="Item name" style="flex:2">
+            <input type="number" class="addon-price" value="${a.price}" placeholder="$" min="0" step="0.01" style="flex:0.8">
+            <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:0.3rem 0.6rem">&times;</button>
+          </div>`).join('')}
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="addAddonRow()" style="margin-top:0.25rem"><i class="fas fa-plus"></i> Add Item</button>
+      </div>
       <div class="form-group"><label>Available Days</label><input type="text" id="pkgDays" value="${(pkg?.availableDays || []).join(', ')}" placeholder="Monday, Tuesday, Wednesday..."></div>
       <div class="form-group"><label>Sort Order</label><input type="number" id="pkgSort" value="${pkg?.sortOrder || 0}"></div>
       <div class="form-group">
@@ -935,6 +991,32 @@ function openPackageEditor(pkgId) {
     </form>
   `;
   openModal(html);
+}
+
+function addAddonRow() {
+  const container = document.getElementById('pkgAddOnsContainer');
+  const row = document.createElement('div');
+  row.className = 'addon-row';
+  row.style.cssText = 'display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center';
+  row.innerHTML = `
+    <input type="text" class="addon-name" placeholder="Item name (e.g. Whole Pizza)" style="flex:2">
+    <input type="number" class="addon-price" placeholder="$" min="0" step="0.01" style="flex:0.8">
+    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="padding:0.3rem 0.6rem">&times;</button>
+  `;
+  container.appendChild(row);
+}
+
+function getAddonRows() {
+  const rows = document.querySelectorAll('#pkgAddOnsContainer .addon-row');
+  const addOns = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.addon-name').value.trim();
+    const price = parseFloat(row.querySelector('.addon-price').value);
+    if (name && !isNaN(price)) {
+      addOns.push({ name, price });
+    }
+  });
+  return addOns;
 }
 
 function previewPkgImage(input) {
@@ -992,6 +1074,7 @@ async function savePackageAdmin(pkgId) {
     duration: document.getElementById('pkgDuration').value.trim(),
     imageUrl,
     includes: document.getElementById('pkgIncludes').value.split('\n').map(s => s.trim()).filter(Boolean),
+    addOns: getAddonRows(),
     availableDays: document.getElementById('pkgDays').value.split(',').map(s => s.trim()).filter(Boolean),
     sortOrder: parseInt(document.getElementById('pkgSort').value) || 0,
     active: document.getElementById('pkgActive').checked
