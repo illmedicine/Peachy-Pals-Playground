@@ -9,6 +9,7 @@
 //   "rules": {
 //     "bookings": { ".read": true, ".write": true },
 //     "packages": { ".read": true, ".write": true },
+//     "memberships": { ".read": true, ".write": true },
 //     "blockedDates": { ".read": true, ".write": true }
 //   }
 // }
@@ -159,6 +160,41 @@ const DataStore = {
     let bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
     bookings = bookings.filter(b => b.id !== id);
     localStorage.setItem('pp_bookings', JSON.stringify(bookings));
+  },
+
+  // --- MEMBERSHIPS ---
+  async createMembership(membership) {
+    membership.createdAt = new Date().toISOString();
+    membership.membershipCode = 'PPM-' + Date.now().toString(36).toUpperCase().slice(-6);
+    if (isFirebaseConfigured) {
+      const ref = this._ref('memberships').push();
+      await ref.set(membership);
+      return { id: ref.key, ...membership };
+    }
+    const memberships = JSON.parse(localStorage.getItem('pp_memberships') || '[]');
+    membership.id = 'mem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    memberships.push(membership);
+    localStorage.setItem('pp_memberships', JSON.stringify(memberships));
+    return membership;
+  },
+
+  async getAllMemberships() {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('memberships').orderByChild('createdAt').once('value');
+      return this._snapToArray(snap).reverse();
+    }
+    return JSON.parse(localStorage.getItem('pp_memberships') || '[]').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async updateMembership(id, data) {
+    if (isFirebaseConfigured) {
+      await this._ref('memberships/' + id).update(data);
+      return;
+    }
+    const memberships = JSON.parse(localStorage.getItem('pp_memberships') || '[]');
+    const idx = memberships.findIndex(m => m.id === id);
+    if (idx >= 0) Object.assign(memberships[idx], data);
+    localStorage.setItem('pp_memberships', JSON.stringify(memberships));
   },
 
   // --- BLOCKED DATES ---

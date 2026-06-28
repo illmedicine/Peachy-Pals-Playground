@@ -36,6 +36,7 @@ let adminCalYear = new Date().getFullYear();
 let blockedDates = [];
 let allBookings = [];
 let isAdminLoggedIn = false;
+let selectedMembershipPlan = null;
 
 // ==========================================
 // NAVIGATION & ROUTING
@@ -46,7 +47,7 @@ function navigate(view) {
 
 function handleRoute() {
   const hash = window.location.hash.slice(1) || 'home';
-  const validViews = ['home', 'packages', 'booking', 'manage', 'admin'];
+  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'admin'];
   const view = validViews.includes(hash) ? hash : 'home';
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -64,6 +65,7 @@ function handleRoute() {
   // Load view-specific data
   if (view === 'packages') renderPackagesDetail();
   if (view === 'booking') { renderBookingPackages(); bookingStep(1); }
+  if (view === 'memberships') { initMembershipView(); }
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
 }
 
@@ -925,6 +927,330 @@ async function saveTimeSlots(dateStr) {
   renderAdminCalendar();
   adminSelectDate(dateStr);
   showToast('Time slots updated', 'success');
+}
+
+// ==========================================
+// MEMBERSHIPS
+// ==========================================
+const MEMBERSHIP_PLANS = {
+  monthly: {
+    name: 'Monthly Membership',
+    pricePerChild: 65,
+    siblingFee: 20,
+    commitment: 'month-to-month',
+    cancellable: true
+  },
+  annual: {
+    name: 'Annual Membership',
+    pricePerChild: 55,
+    siblingFee: 20,
+    commitment: '12 months',
+    cancellable: false
+  }
+};
+
+function initMembershipView() {
+  selectedMembershipPlan = null;
+  membershipStep(1);
+  document.querySelectorAll('.mem-plan-card').forEach(c => c.classList.remove('selected'));
+}
+
+function selectMembershipPlan(planType) {
+  selectedMembershipPlan = planType;
+  document.querySelectorAll('.mem-plan-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById(planType === 'monthly' ? 'planMonthly' : 'planAnnual').classList.add('selected');
+  setTimeout(() => membershipStep(2), 300);
+}
+
+function membershipStep(step) {
+  if (step === 2 && !selectedMembershipPlan) {
+    showToast('Please select a membership plan first', 'error');
+    return;
+  }
+
+  document.querySelectorAll('.steps-bar .step[data-mstep]').forEach(s => {
+    const sn = parseInt(s.dataset.mstep);
+    s.classList.remove('active', 'done');
+    if (sn < step) s.classList.add('done');
+    if (sn === step) s.classList.add('active');
+  });
+
+  for (let i = 1; i <= 5; i++) {
+    const el = document.getElementById('memStep' + i);
+    if (el) el.classList.toggle('active', i === step);
+  }
+
+  if (step === 2) initSiblingFields();
+  if (step === 3) renderMembershipAgreement();
+  if (step === 4) renderMembershipPayment();
+}
+
+function initSiblingFields() {
+  const sibInput = document.getElementById('memSiblings');
+  sibInput.removeEventListener('input', updateSiblingNames);
+  sibInput.addEventListener('input', updateSiblingNames);
+  updateSiblingNames();
+
+  const phoneEl = document.getElementById('memPhone');
+  if (phoneEl && !phoneEl._formatted) {
+    phoneEl._formatted = true;
+    phoneEl.addEventListener('input', function () {
+      let v = this.value.replace(/\D/g, '');
+      if (v.length > 10) v = v.slice(0, 10);
+      if (v.length >= 7) this.value = `(${v.slice(0, 3)}) ${v.slice(3, 6)}-${v.slice(6)}`;
+      else if (v.length >= 4) this.value = `(${v.slice(0, 3)}) ${v.slice(3)}`;
+      else if (v.length > 0) this.value = `(${v}`;
+    });
+  }
+}
+
+function updateSiblingNames() {
+  const count = parseInt(document.getElementById('memSiblings').value) || 0;
+  const container = document.getElementById('siblingNamesContainer');
+  if (count === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  container.style.display = 'block';
+  let html = '<h4 style="margin:1rem 0 0.5rem">Sibling Information</h4>';
+  for (let i = 1; i <= count; i++) {
+    html += `
+      <div class="form-row">
+        <div class="form-group"><label>Sibling ${i} Name *</label><input type="text" id="memSibName${i}" required></div>
+        <div class="form-group"><label>Sibling ${i} Age *</label><input type="number" id="memSibAge${i}" min="0" max="12" required></div>
+      </div>`;
+  }
+  container.innerHTML = html;
+  updateMembershipPricing();
+}
+
+function updateMembershipPricing() {}
+
+function validateMemberDetailsAndContinue() {
+  const required = ['memFirstName', 'memLastName', 'memPhone', 'memEmail', 'memAddress', 'memChildName', 'memChildAge'];
+  for (const fid of required) {
+    const el = document.getElementById(fid);
+    if (!el || !el.value.trim()) {
+      if (el) el.focus();
+      showToast('Please fill in all required fields', 'error');
+      return;
+    }
+  }
+  const sibCount = parseInt(document.getElementById('memSiblings').value) || 0;
+  for (let i = 1; i <= sibCount; i++) {
+    const nameEl = document.getElementById('memSibName' + i);
+    const ageEl = document.getElementById('memSibAge' + i);
+    if (!nameEl?.value.trim() || !ageEl?.value.trim()) {
+      showToast('Please fill in all sibling information', 'error');
+      return;
+    }
+  }
+  membershipStep(3);
+}
+
+function renderMembershipAgreement() {
+  const plan = MEMBERSHIP_PLANS[selectedMembershipPlan];
+  const siblings = parseInt(document.getElementById('memSiblings').value) || 0;
+  const monthlyTotal = plan.pricePerChild + (siblings * plan.siblingFee);
+
+  let childrenList = `<li>${escapeHtml(document.getElementById('memChildName').value)} (Age ${document.getElementById('memChildAge').value})</li>`;
+  for (let i = 1; i <= siblings; i++) {
+    const name = document.getElementById('memSibName' + i)?.value || '';
+    const age = document.getElementById('memSibAge' + i)?.value || '';
+    childrenList += `<li>${escapeHtml(name)} (Age ${age})</li>`;
+  }
+
+  document.getElementById('membershipSummary').innerHTML = `
+    <h3>Membership Summary</h3>
+    <table class="mem-summary-table">
+      <tr><td><strong>Plan:</strong></td><td>${plan.name}</td></tr>
+      <tr><td><strong>Member:</strong></td><td>${escapeHtml(document.getElementById('memFirstName').value)} ${escapeHtml(document.getElementById('memLastName').value)}</td></tr>
+      <tr><td><strong>Phone:</strong></td><td>${escapeHtml(document.getElementById('memPhone').value)}</td></tr>
+      <tr><td><strong>Email:</strong></td><td>${escapeHtml(document.getElementById('memEmail').value)}</td></tr>
+      <tr><td><strong>Children:</strong></td><td><ul style="margin:0;padding-left:1.2rem">${childrenList}</ul></td></tr>
+      <tr><td colspan="2"><hr style="margin:0.5rem 0"></td></tr>
+      <tr><td><strong>Base Rate:</strong></td><td>$${plan.pricePerChild}/month (primary child)</td></tr>
+      ${siblings > 0 ? `<tr><td><strong>Siblings (${siblings}):</strong></td><td>+$${siblings * plan.siblingFee}/month ($${plan.siblingFee} each)</td></tr>` : ''}
+      <tr><td><strong>Monthly Total:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${monthlyTotal}/month</td></tr>
+      ${selectedMembershipPlan === 'annual' ? `<tr><td><strong>Commitment:</strong></td><td style="font-weight:700;color:var(--teal-dark)">12 months ($${monthlyTotal * 12} total over term)</td></tr>` : ''}
+    </table>
+  `;
+
+  let agreementHtml = '';
+  if (selectedMembershipPlan === 'annual') {
+    agreementHtml = `
+      <h3>Annual Membership Agreement</h3>
+      <div class="legal-text">
+        <p><strong>MEMBERSHIP AGREEMENT — PLEASE READ CAREFULLY BEFORE SIGNING</strong></p>
+
+        <p><strong>1. TERM AND COMMITMENT.</strong> By selecting the Annual Membership plan, you ("Member") are entering into a binding twelve (12) month membership agreement with Peachy Pals Playland ("Facility"), located at 801 West Ave Suite 201, Cartersville, Georgia 30120. This agreement begins on the date of enrollment and continues for a minimum period of twelve (12) consecutive months ("Initial Term").</p>
+
+        <p><strong>2. MONTHLY BILLING.</strong> Member agrees to pay <strong>$${plan.pricePerChild} per month</strong> for the primary child${siblings > 0 ? ` and an additional <strong>$${plan.siblingFee} per month for each additional sibling (${siblings} sibling${siblings > 1 ? 's' : ''} = $${siblings * plan.siblingFee}/month)</strong>` : ''}, for a total recurring monthly charge of <strong>$${monthlyTotal}</strong>. This amount will be automatically charged to the payment method provided on file on a monthly basis throughout the duration of the Initial Term.</p>
+
+        <p><strong>3. NON-CANCELLATION POLICY.</strong> Member acknowledges and agrees that this membership <strong>cannot be cancelled, terminated, or suspended</strong> during the Initial Term of twelve (12) months. Member is obligated to pay all monthly installments for the full twelve (12) month period regardless of usage, relocation, or change in personal circumstances. The total financial obligation under this agreement is <strong>$${monthlyTotal * 12}</strong> over the twelve (12) month term.</p>
+
+        <p><strong>4. EARLY TERMINATION.</strong> There is no early termination option. If Member's payment method is declined or payment is otherwise not received, the Facility reserves the right to pursue collection of all remaining amounts due under this agreement, including any applicable late fees, collection costs, and attorney's fees permitted under Georgia law.</p>
+
+        <p><strong>5. AUTOMATIC RENEWAL.</strong> At the conclusion of the Initial Term, this membership will automatically convert to a month-to-month membership at the then-current monthly rate, which may be adjusted by the Facility with thirty (30) days' written notice. After the Initial Term, the month-to-month membership may be cancelled by either party with thirty (30) days' written notice.</p>
+
+        <p><strong>6. MEMBERSHIP BENEFITS.</strong> During the term of this agreement, all enrolled children shall have unlimited access to open play sessions during regular business hours, subject to the Facility's standard rules, capacity limitations, and operational schedule.</p>
+
+        <p><strong>7. WAIVER AND RELEASE.</strong> Member acknowledges that all children must have a valid signed waiver on file with the Facility before participating in any play activities. The membership does not waive or replace any waiver, release, or assumption of risk requirements.</p>
+
+        <p><strong>8. GOVERNING LAW.</strong> This agreement shall be governed by and construed in accordance with the laws of the State of Georgia. Any disputes arising under this agreement shall be subject to the jurisdiction of the courts in Bartow County, Georgia.</p>
+
+        <p><strong>BY CHECKING THE BOX BELOW, YOU ACKNOWLEDGE THAT YOU HAVE READ, UNDERSTOOD, AND AGREE TO BE BOUND BY ALL TERMS AND CONDITIONS OF THIS TWELVE (12) MONTH MEMBERSHIP AGREEMENT, INCLUDING THE NON-CANCELLATION POLICY AND YOUR OBLIGATION TO PAY ALL TWELVE (12) MONTHLY INSTALLMENTS OF $${monthlyTotal}.</strong></p>
+      </div>
+    `;
+  } else {
+    agreementHtml = `
+      <h3>Monthly Membership Terms</h3>
+      <div class="legal-text">
+        <p><strong>MEMBERSHIP TERMS — PLEASE READ BEFORE CONTINUING</strong></p>
+
+        <p><strong>1. MONTH-TO-MONTH MEMBERSHIP.</strong> By selecting the Monthly Membership plan, you ("Member") are enrolling in a month-to-month membership with Peachy Pals Playland ("Facility"), located at 801 West Ave Suite 201, Cartersville, Georgia 30120.</p>
+
+        <p><strong>2. MONTHLY BILLING.</strong> Member agrees to pay <strong>$${plan.pricePerChild} per month</strong> for the primary child${siblings > 0 ? ` and an additional <strong>$${plan.siblingFee} per month for each additional sibling (${siblings} sibling${siblings > 1 ? 's' : ''} = $${siblings * plan.siblingFee}/month)</strong>` : ''}, for a total recurring monthly charge of <strong>$${monthlyTotal}</strong>. This amount will be charged to the payment method provided on file each month.</p>
+
+        <p><strong>3. CANCELLATION.</strong> This month-to-month membership may be cancelled at any time with thirty (30) days' written notice. Member is responsible for any charges incurred up to the effective date of cancellation.</p>
+
+        <p><strong>4. MEMBERSHIP BENEFITS.</strong> During the term of this membership, all enrolled children shall have unlimited access to open play sessions during regular business hours, subject to the Facility's standard rules, capacity limitations, and operational schedule.</p>
+
+        <p><strong>5. WAIVER AND RELEASE.</strong> Member acknowledges that all children must have a valid signed waiver on file with the Facility before participating in any play activities.</p>
+
+        <p><strong>BY CHECKING THE BOX BELOW, YOU ACKNOWLEDGE THAT YOU HAVE READ, UNDERSTOOD, AND AGREE TO THE MEMBERSHIP TERMS ABOVE, INCLUDING THE RECURRING MONTHLY CHARGE OF $${monthlyTotal}.</strong></p>
+      </div>
+    `;
+  }
+
+  document.getElementById('membershipAgreement').innerHTML = agreementHtml;
+  document.getElementById('memAgreeTerms').checked = false;
+  document.getElementById('btnToMemStep4').disabled = true;
+}
+
+function updateAgreementButton() {
+  document.getElementById('btnToMemStep4').disabled = !document.getElementById('memAgreeTerms').checked;
+}
+
+function renderMembershipPayment() {
+  const plan = MEMBERSHIP_PLANS[selectedMembershipPlan];
+  const siblings = parseInt(document.getElementById('memSiblings').value) || 0;
+  const monthlyTotal = plan.pricePerChild + (siblings * plan.siblingFee);
+
+  document.getElementById('memPaymentSummary').innerHTML = `
+    <h3 style="margin-bottom:1rem">Payment Summary</h3>
+    <table style="width:100%;font-size:0.95rem">
+      <tr><td><strong>Plan:</strong></td><td>${plan.name}</td></tr>
+      <tr><td><strong>Recurring Monthly Charge:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${monthlyTotal}/month</td></tr>
+      ${selectedMembershipPlan === 'annual' ? `<tr><td><strong>Commitment:</strong></td><td style="color:var(--teal-dark);font-weight:700">12 months — $${monthlyTotal * 12} total</td></tr>` : ''}
+      <tr><td><strong>First Charge:</strong></td><td style="font-weight:700">$${monthlyTotal} (today)</td></tr>
+    </table>
+    <p style="margin-top:1rem;font-size:0.85rem;color:var(--gray)">
+      Your selected payment method will be charged <strong>$${monthlyTotal}</strong> today and on the same date each subsequent month${selectedMembershipPlan === 'annual' ? ' for the full 12-month term' : ' until cancelled'}.
+    </p>
+  `;
+
+  document.querySelectorAll('input[name="memPayMethod"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      const info = CONFIG.paymentInfo[this.value];
+      const instrEl = document.getElementById('memPaymentInstructions');
+      if (info) {
+        let text = info.instructions.replace('deposit', 'first monthly payment').replace('booking confirmation code', 'membership reference code');
+        instrEl.innerHTML = text + '<p style="margin-top:0.75rem;font-size:0.85rem;color:var(--gray)"><strong>Recurring payments:</strong> Our team will contact you to set up automatic monthly billing through your selected payment method.</p>';
+      }
+    });
+  });
+}
+
+async function submitMembership() {
+  const payMethod = document.querySelector('input[name="memPayMethod"]:checked');
+  if (!payMethod) {
+    showToast('Please select a payment method', 'error');
+    return;
+  }
+
+  const plan = MEMBERSHIP_PLANS[selectedMembershipPlan];
+  const siblings = parseInt(document.getElementById('memSiblings').value) || 0;
+  const monthlyTotal = plan.pricePerChild + (siblings * plan.siblingFee);
+
+  const children = [{
+    name: document.getElementById('memChildName').value.trim(),
+    age: parseInt(document.getElementById('memChildAge').value) || 0
+  }];
+  for (let i = 1; i <= siblings; i++) {
+    children.push({
+      name: (document.getElementById('memSibName' + i)?.value || '').trim(),
+      age: parseInt(document.getElementById('memSibAge' + i)?.value) || 0
+    });
+  }
+
+  const membership = {
+    planType: selectedMembershipPlan,
+    planName: plan.name,
+    firstName: document.getElementById('memFirstName').value.trim(),
+    lastName: document.getElementById('memLastName').value.trim(),
+    phone: document.getElementById('memPhone').value.trim(),
+    email: document.getElementById('memEmail').value.trim(),
+    address: document.getElementById('memAddress').value.trim(),
+    children,
+    numberOfSiblings: siblings,
+    monthlyRate: monthlyTotal,
+    pricePerChild: plan.pricePerChild,
+    siblingFee: plan.siblingFee,
+    commitment: plan.commitment,
+    totalTermCost: selectedMembershipPlan === 'annual' ? monthlyTotal * 12 : null,
+    paymentMethod: payMethod.value,
+    agreedToTerms: true,
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+
+  try {
+    const result = await DataStore.createMembership(membership);
+    launchConfetti();
+    showToast('Membership registered successfully!', 'success');
+
+    const childrenHtml = children.map(c => `${escapeHtml(c.name)} (Age ${c.age})`).join(', ');
+
+    document.getElementById('memConfirmationBox').innerHTML = `
+      <div style="font-size:4rem;margin-bottom:1rem">🎉</div>
+      <h2>Membership Registered!</h2>
+      <p style="color:var(--gray);margin-bottom:1rem">Your membership has been submitted. Here's your reference code:</p>
+      <div class="confirmation-code">${result.membershipCode}</div>
+      <div style="text-align:left;margin:1.5rem 0;padding:1rem;background:var(--cream);border-radius:var(--radius)">
+        <p><strong>Plan:</strong> ${plan.name}</p>
+        <p><strong>Member:</strong> ${escapeHtml(membership.firstName)} ${escapeHtml(membership.lastName)}</p>
+        <p><strong>Children:</strong> ${childrenHtml}</p>
+        <p><strong>Monthly Charge:</strong> $${monthlyTotal}/month</p>
+        ${selectedMembershipPlan === 'annual' ? `<p><strong>Commitment:</strong> 12 months ($${monthlyTotal * 12} total)</p>` : '<p><strong>Type:</strong> Month-to-month (cancel anytime with 30 days notice)</p>'}
+        <p><strong>Payment:</strong> ${CONFIG.paymentInfo[payMethod.value]?.label || payMethod.value}</p>
+      </div>
+      <p style="color:var(--gray);font-size:0.9rem;margin-bottom:1.5rem">
+        Our team will contact you within 24 hours to finalize your recurring payment setup. Save your reference code for your records!
+      </p>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="navigate('home')"><i class="fas fa-home"></i> Back Home</button>
+      </div>
+    `;
+    membershipStep(5);
+    resetMembershipForm();
+  } catch (err) {
+    console.error('Membership error:', err);
+    showToast('Error creating membership. Please try again.', 'error');
+  }
+}
+
+function resetMembershipForm() {
+  selectedMembershipPlan = null;
+  ['memFirstName', 'memLastName', 'memPhone', 'memEmail', 'memAddress', 'memChildName', 'memChildAge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('memSiblings').value = '0';
+  document.getElementById('siblingNamesContainer').innerHTML = '';
+  document.getElementById('siblingNamesContainer').style.display = 'none';
+  document.querySelectorAll('.mem-plan-card').forEach(c => c.classList.remove('selected'));
 }
 
 // ==========================================

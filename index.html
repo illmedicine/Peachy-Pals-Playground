@@ -31,6 +31,7 @@
       <div class="nav-links" id="navLinks">
         <a href="#home" data-view="home" onclick="navigate('home')">Home</a>
         <a href="#packages" data-view="packages" onclick="navigate('packages')">Packages</a>
+        <a href="#memberships" data-view="memberships" onclick="navigate('memberships')">Memberships</a>
         <a href="#home" onclick="scrollToId('services')">Services</a>
         <a href="#home" onclick="scrollToId('contact')">Contact</a>
         <a href="#home" onclick="scrollToId('reviews')">Reviews</a>
@@ -55,6 +56,7 @@
     <button class="mobile-close" onclick="toggleMobileNav()">&times;</button>
     <a href="#home" onclick="navigate('home');toggleMobileNav()"><i class="fas fa-home"></i> Home</a>
     <a href="#packages" onclick="navigate('packages');toggleMobileNav()"><i class="fas fa-gift"></i> Packages</a>
+    <a href="#memberships" onclick="navigate('memberships');toggleMobileNav()"><i class="fas fa-id-card"></i> Memberships</a>
     <a href="#home" onclick="scrollToId('services');toggleMobileNav()"><i class="fas fa-star"></i> Services</a>
     <a href="#home" onclick="scrollToId('contact');toggleMobileNav()"><i class="fas fa-envelope"></i> Contact</a>
     <a href="#home" onclick="scrollToId('reviews');toggleMobileNav()"><i class="fas fa-star-half-alt"></i> Reviews</a>
@@ -152,7 +154,8 @@
             <div class="svc-img" style="background-image: url('https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format')"></div>
             <h3>Memberships</h3>
             <div class="svc-price">From $55<small>/mo</small></div>
-            <p>Unlimited visits! Monthly: $65/child. Annual: $55/child. $20 sibling discount.</p>
+            <p>Unlimited visits! Monthly: $65/child. Annual: $55/child. +$20/mo per additional sibling.</p>
+            <button class="btn btn-primary btn-sm" onclick="navigate('memberships')">View Memberships</button>
           </div>
           <div class="svc-card">
             <div class="svc-img" style="background-image: url('https://images.unsplash.com/photo-1472162072942-cd5147eb3902?w=600&h=300&fit=crop&auto=format')"></div>
@@ -256,7 +259,7 @@
             <h4>Services</h4>
             <a href="#" onclick="scrollToId('services')">Open Play</a>
             <a href="#" onclick="scrollToId('services')">Birthday Parties</a>
-            <a href="#" onclick="scrollToId('services')">Memberships</a>
+            <a href="#memberships" onclick="navigate('memberships')">Memberships</a>
             <a href="#" onclick="scrollToId('services')">Field Trips</a>
           </div>
           <div class="footer-links">
@@ -515,6 +518,149 @@
         </div>
       </section>
     </div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ================ MEMBERSHIPS VIEW ==================== -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-memberships">
+    <section class="page-header membership-header">
+      <h1><i class="fas fa-id-card"></i> Memberships</h1>
+      <p>Unlimited play for your little ones — choose the plan that fits your family!</p>
+    </section>
+    <section class="container membership-container">
+      <!-- Step Indicator -->
+      <div class="steps-bar">
+        <div class="step active" data-mstep="1"><span class="step-num">1</span><span class="step-label">Plan</span></div>
+        <div class="step" data-mstep="2"><span class="step-num">2</span><span class="step-label">Details</span></div>
+        <div class="step" data-mstep="3"><span class="step-num">3</span><span class="step-label">Agreement</span></div>
+        <div class="step" data-mstep="4"><span class="step-num">4</span><span class="step-label">Payment</span></div>
+        <div class="step" data-mstep="5"><span class="step-num">5</span><span class="step-label">Confirm</span></div>
+      </div>
+
+      <!-- Step 1: Plan Selection -->
+      <div class="membership-step active" id="memStep1">
+        <h2>Choose Your Membership Plan</h2>
+        <p class="membership-intro">Both memberships include unlimited visits for your child. All memberships are billed monthly.</p>
+        <div class="membership-plans">
+          <div class="mem-plan-card" id="planMonthly" onclick="selectMembershipPlan('monthly')">
+            <div class="mem-plan-badge">Flexible</div>
+            <h3>Monthly Membership</h3>
+            <div class="mem-plan-price">$65<small>/month per child</small></div>
+            <ul class="mem-plan-features">
+              <li>Unlimited visits</li>
+              <li>Cancel anytime — no long-term commitment</li>
+              <li>+$20/month per additional sibling</li>
+              <li>Billed monthly to your payment method</li>
+            </ul>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); selectMembershipPlan('monthly')">Select Monthly</button>
+          </div>
+          <div class="mem-plan-card featured" id="planAnnual" onclick="selectMembershipPlan('annual')">
+            <div class="mem-plan-badge best-value">Best Value</div>
+            <div class="mem-plan-savings">Save $120/year!</div>
+            <h3>Annual Membership</h3>
+            <div class="mem-plan-price">$55<small>/month per child</small></div>
+            <ul class="mem-plan-features">
+              <li>Unlimited visits</li>
+              <li>12-month commitment — locked-in rate</li>
+              <li>+$20/month per additional sibling</li>
+              <li>Billed monthly for 12 months</li>
+            </ul>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); selectMembershipPlan('annual')">Select Annual</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Member Details -->
+      <div class="membership-step" id="memStep2">
+        <h2>Member Information</h2>
+        <form id="memberDetailsForm" class="booking-form" onsubmit="return false">
+          <h3 style="margin-bottom:0.5rem">Parent / Guardian</h3>
+          <div class="form-row">
+            <div class="form-group"><label>First Name *</label><input type="text" id="memFirstName" required></div>
+            <div class="form-group"><label>Last Name *</label><input type="text" id="memLastName" required></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Phone Number *</label><input type="tel" id="memPhone" required placeholder="(xxx) xxx-xxxx"></div>
+            <div class="form-group"><label>Email *</label><input type="email" id="memEmail" required placeholder="email@example.com"></div>
+          </div>
+          <div class="form-group"><label>Mailing Address *</label><input type="text" id="memAddress" required placeholder="Street address, City, State, ZIP"></div>
+
+          <h3 style="margin:1.5rem 0 0.5rem">Children</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Primary Child's Name *</label>
+              <input type="text" id="memChildName" required>
+            </div>
+            <div class="form-group">
+              <label>Child's Age *</label>
+              <input type="number" id="memChildAge" min="0" max="12" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Number of Additional Siblings</label>
+            <input type="number" id="memSiblings" min="0" max="10" value="0" onchange="updateMembershipPricing()">
+            <small style="color:var(--gray)">+$20/month per additional sibling</small>
+          </div>
+          <div id="siblingNamesContainer" style="display:none">
+            <!-- Dynamically populated -->
+          </div>
+        </form>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="membershipStep(1)"><i class="fas fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary" onclick="validateMemberDetailsAndContinue()">Continue <i class="fas fa-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- Step 3: Agreement & Review -->
+      <div class="membership-step" id="memStep3">
+        <h2>Review &amp; Agreement</h2>
+        <div class="membership-summary" id="membershipSummary">
+          <!-- Populated by JS -->
+        </div>
+        <div class="membership-agreement" id="membershipAgreement">
+          <!-- Populated by JS -->
+        </div>
+        <div class="agreement-checkbox-wrap">
+          <label class="agreement-checkbox">
+            <input type="checkbox" id="memAgreeTerms" onchange="updateAgreementButton()">
+            <span id="agreeLabel">I have read, understand, and agree to the membership terms and conditions outlined above.</span>
+          </label>
+        </div>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="membershipStep(2)"><i class="fas fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary" id="btnToMemStep4" disabled onclick="membershipStep(4)">Continue to Payment <i class="fas fa-arrow-right"></i></button>
+        </div>
+      </div>
+
+      <!-- Step 4: Payment -->
+      <div class="membership-step" id="memStep4">
+        <h2>Payment Information</h2>
+        <div class="membership-payment-summary" id="memPaymentSummary">
+          <!-- Populated by JS -->
+        </div>
+        <div class="payment-methods">
+          <h3>Select Payment Method</h3>
+          <div class="pay-options">
+            <label class="pay-option"><input type="radio" name="memPayMethod" value="paypal"><i class="fab fa-paypal"></i> PayPal</label>
+            <label class="pay-option"><input type="radio" name="memPayMethod" value="venmo"><i class="fab fa-vimeo-v"></i> Venmo</label>
+            <label class="pay-option"><input type="radio" name="memPayMethod" value="cashapp"><i class="fas fa-dollar-sign"></i> Cash App</label>
+            <label class="pay-option"><input type="radio" name="memPayMethod" value="chime"><i class="fas fa-university"></i> Chime</label>
+            <label class="pay-option"><input type="radio" name="memPayMethod" value="card"><i class="fas fa-credit-card"></i> Debit / Credit Card</label>
+          </div>
+          <div id="memPaymentInstructions" class="payment-instructions"><!-- JS --></div>
+        </div>
+        <div class="step-nav">
+          <button class="btn btn-outline" onclick="membershipStep(3)"><i class="fas fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary btn-xl" onclick="submitMembership()" id="btnSubmitMembership"><i class="fas fa-check-circle"></i> Confirm Membership</button>
+        </div>
+      </div>
+
+      <!-- Step 5: Confirmation -->
+      <div class="membership-step" id="memStep5">
+        <div class="confirmation-box" id="memConfirmationBox"><!-- JS --></div>
+      </div>
+    </section>
   </div>
 
   <!-- ====================================================== -->
