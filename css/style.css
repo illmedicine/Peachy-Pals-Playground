@@ -537,6 +537,17 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
 }
 .admin-btn:hover { border-color: var(--peach); color: var(--peach); }
 
+/* Powered By */
+.powered-by {
+  text-align: center; padding: 0.6rem 1rem;
+  font-size: 0.7rem; color: #999; letter-spacing: 0.3px;
+  background: #1a1a1a;
+}
+.powered-by a {
+  color: #5b9bd5; text-decoration: underline;
+}
+.powered-by a:hover { color: #7bb8e8; }
+
 /* ==========================================
    BOOKING WIZARD
    ========================================== */
