@@ -406,16 +406,10 @@
         <h2>Deposit Payment</h2>
         <div class="payment-summary" id="paymentSummary"><!-- JS --></div>
         <div class="payment-methods">
-          <h3>Select Payment Method</h3>
-          <div class="pay-options">
-            <label class="pay-option"><input type="radio" name="payMethod" value="paypal"><i class="fab fa-paypal"></i> PayPal</label>
-            <label class="pay-option"><input type="radio" name="payMethod" value="venmo"><i class="fab fa-vimeo-v"></i> Venmo</label>
-            <label class="pay-option"><input type="radio" name="payMethod" value="cashapp"><i class="fas fa-dollar-sign"></i> Cash App</label>
-            <label class="pay-option"><input type="radio" name="payMethod" value="chime"><i class="fas fa-university"></i> Chime</label>
-            <label class="pay-option"><input type="radio" name="payMethod" value="card"><i class="fas fa-credit-card"></i> Debit / Credit Card</label>
-          </div>
-          <div id="paymentInstructions" class="payment-instructions"><!-- JS --></div>
-          <p style="margin-top:1rem;font-size:0.85rem;color:var(--gray)"><i class="fas fa-info-circle"></i> Payment is optional during booking. You can pay anytime before your party via <strong>Manage Booking</strong>.</p>
+          <h3><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Deposit with Card</h3>
+          <div id="squareCardBooking" style="margin:1rem 0"></div>
+          <p id="squareBookingStatus" style="display:none;margin-top:0.5rem;font-size:0.85rem"></p>
+          <p style="margin-top:1rem;font-size:0.85rem;color:var(--gray)"><i class="fas fa-info-circle"></i> Payment is optional — you can skip and pay anytime before your party via <strong>Manage Booking</strong>.</p>
         </div>
         <div class="step-nav">
           <button class="btn btn-outline" onclick="bookingStep(3)"><i class="fas fa-arrow-left"></i> Back</button>
@@ -677,15 +671,10 @@
           <!-- Populated by JS -->
         </div>
         <div class="payment-methods">
-          <h3>Select Payment Method</h3>
-          <div class="pay-options">
-            <label class="pay-option"><input type="radio" name="memPayMethod" value="paypal"><i class="fab fa-paypal"></i> PayPal</label>
-            <label class="pay-option"><input type="radio" name="memPayMethod" value="venmo"><i class="fab fa-vimeo-v"></i> Venmo</label>
-            <label class="pay-option"><input type="radio" name="memPayMethod" value="cashapp"><i class="fas fa-dollar-sign"></i> Cash App</label>
-            <label class="pay-option"><input type="radio" name="memPayMethod" value="chime"><i class="fas fa-university"></i> Chime</label>
-            <label class="pay-option"><input type="radio" name="memPayMethod" value="card"><i class="fas fa-credit-card"></i> Debit / Credit Card</label>
-          </div>
-          <div id="memPaymentInstructions" class="payment-instructions"><!-- JS --></div>
+          <h3><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay First Month with Card</h3>
+          <div id="squareCardMembership" style="margin:1rem 0"></div>
+          <p id="squareMembershipStatus" style="display:none;margin-top:0.5rem;font-size:0.85rem"></p>
+          <p style="margin-top:1rem;font-size:0.85rem;color:var(--gray)"><i class="fas fa-info-circle"></i> Our team will contact you within 24 hours to set up recurring billing.</p>
         </div>
         <div class="step-nav">
           <button class="btn btn-outline" onclick="membershipStep(3)"><i class="fas fa-arrow-left"></i> Back</button>

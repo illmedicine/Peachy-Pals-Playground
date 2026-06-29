@@ -31,14 +31,7 @@ const CONFIG = {
   squareAppId: 'sandbox-sq0idb-jjkI_jNaTY8szwrHO6rwVg',
   squareLocationId: 'LDFD5P82KMCHA',
   squarePayEndpoint: 'https://peachypals.demarkuswilsone.workers.dev/',
-  // Payment handles — owner should update these
-  paymentInfo: {
-    paypal: { label: 'PayPal', handle: 'info@peachypalsplay.com', instructions: 'Send deposit to <strong>info@peachypalsplay.com</strong> via PayPal. Include your booking confirmation code in the note.' },
-    venmo: { label: 'Venmo', handle: '@PeachyPals', instructions: 'Send deposit to <strong>@PeachyPals</strong> on Venmo. Include your booking confirmation code in the note.' },
-    cashapp: { label: 'Cash App', handle: '$PeachyPals', instructions: 'Send deposit to <strong>$PeachyPals</strong> on Cash App. Include your booking confirmation code in the note.' },
-    chime: { label: 'Chime', handle: 'Peachy Pals Playland', instructions: 'Send deposit via Chime Pay to <strong>Peachy Pals Playland</strong>. Include your booking confirmation code in the note.' },
-    card: { label: 'Debit/Credit Card', handle: '', instructions: 'Card payment will be processed after booking confirmation. Our team will contact you within 24 hours to securely collect your card information via phone at <strong>(770) 387-1020</strong>.' }
-  }
+  paymentLabel: 'Square (Card)'
 };
 
 // ==========================================
@@ -487,16 +480,10 @@ function renderPaymentSummary() {
     </table>
   `;
 
-  document.querySelectorAll('input[name="payMethod"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-      const info = CONFIG.paymentInfo[this.value];
-      document.getElementById('paymentInstructions').innerHTML = info ? info.instructions : '';
-    });
-  });
+  initSquareCardForm('squareCardBooking');
 }
 
 async function submitBooking() {
-  const payMethod = document.querySelector('input[name="payMethod"]:checked');
 
   const pkg = selectedPackage;
   const basePrice = getPriceForDate(pkg, selectedDate);
@@ -530,15 +517,47 @@ async function submitBooking() {
     depositPaid: false,
     depositAmount: deposit,
     totalPrice: total,
-    paymentMethod: payMethod ? payMethod.value : 'pay-later'
+    paymentMethod: 'square',
+    depositPaid: false
   };
+
+  // Try Square payment if card was filled in
+  if (squareCard && CONFIG.squarePayEndpoint) {
+    try {
+      const tokenResult = await squareCard.tokenize();
+      if (tokenResult.status === 'OK') {
+        const btn = document.getElementById('btnSubmitBooking');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing payment...';
+        const resp = await fetch(CONFIG.squarePayEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nonce: tokenResult.token,
+            amount: Math.round(deposit * 100),
+            currency: 'USD',
+            confirmationCode: 'pending'
+          })
+        });
+        const payData = await resp.json();
+        if (resp.ok && !payData.error) {
+          booking.depositPaid = true;
+          booking.squarePaymentId = payData.paymentId || '';
+        } else {
+          showToast('Card payment failed: ' + (payData.error || 'Unknown error') + '. Booking saved — you can pay later.', 'error');
+        }
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle"></i> Confirm Booking';
+      }
+    } catch (e) {
+      console.warn('Square payment skipped:', e);
+    }
+  }
 
   try {
     const result = await DataStore.createBooking(booking);
     launchConfetti();
     showToast('Booking created successfully!', 'success');
-
-    const payLabel = payMethod ? (CONFIG.paymentInfo[payMethod.value]?.label || payMethod.value) : 'Pay Later';
 
     document.getElementById('confirmationBox').innerHTML = `
       <div style="font-size:4rem;margin-bottom:1rem">🎉</div>
@@ -550,18 +569,13 @@ async function submitBooking() {
         <p><strong>Date:</strong> ${formatDateDisplay(selectedDate)}</p>
         <p><strong>Time:</strong> ${selectedTime}</p>
         <p><strong>Child:</strong> ${escapeHtml(booking.childName)} (Age ${booking.childAge})</p>
-        <p><strong>Total:</strong> $${total.toFixed(2)} | <strong>Deposit Due:</strong> $${deposit}</p>
-        <p><strong>Payment:</strong> ${payLabel}</p>
+        <p><strong>Total:</strong> $${total.toFixed(2)} | <strong>Deposit:</strong> $${deposit} ${booking.depositPaid ? '✅ Paid' : '⏳ Due'}</p>
       </div>
       ${!booking.depositPaid ? `
         <div style="margin:1rem 0;padding:1rem;background:var(--cream2);border-radius:var(--radius);border:2px solid var(--peach-light)">
           <p style="font-weight:700;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Your Deposit ($${deposit})</p>
           <p style="font-size:0.85rem;color:var(--gray);margin-bottom:0.75rem">You can pay now or anytime before your party via Manage Booking.</p>
           <div id="squarePayConfirm"></div>
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
-            ${CONFIG.paymentInfo.venmo ? `<a href="https://venmo.com/${CONFIG.paymentInfo.venmo.handle.replace('@','')}?txn=pay&amount=${deposit}&note=${encodeURIComponent('Peachy Pals ' + result.confirmationCode)}" target="_blank" class="btn btn-outline btn-sm"><i class="fab fa-vimeo-v"></i> Venmo $${deposit}</a>` : ''}
-            ${CONFIG.paymentInfo.cashapp ? `<a href="https://cash.app/${CONFIG.paymentInfo.cashapp.handle}/$${ deposit}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-dollar-sign"></i> Cash App $${deposit}</a>` : ''}
-          </div>
         </div>
       ` : ''}
       <p style="color:var(--gray);font-size:0.9rem;margin-bottom:1.5rem">
@@ -868,17 +882,13 @@ function renderBookingCard(b, isAdmin) {
         <dt>Adults:</dt><dd>${b.numberOfAdults || 0}</dd>
         <dt>Total:</dt><dd>$${b.totalPrice || 0}</dd>
         <dt>Deposit:</dt><dd>$${b.depositAmount || 0} (${b.depositPaid ? '✅ Paid' : '⏳ Pending'})</dd>
-        <dt>Payment:</dt><dd>${CONFIG.paymentInfo[b.paymentMethod]?.label || b.paymentMethod || 'N/A'}</dd>
+        <dt>Payment:</dt><dd>${b.paymentMethod === 'square' ? 'Card (Square)' : (b.paymentMethod || 'N/A')}</dd>
         ${b.specialRequests ? `<dt>Requests:</dt><dd>${escapeHtml(b.specialRequests)}</dd>` : ''}
       </dl>
       ${!b.depositPaid && b.status !== 'cancelled' && !isAdmin ? `
         <div class="booking-pay-section">
           <p style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Deposit — $${b.depositAmount || 0}</p>
           <div id="squarePay_${b.id}"></div>
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
-            <a href="https://venmo.com/${(CONFIG.paymentInfo.venmo?.handle || '').replace('@','')}?txn=pay&amount=${b.depositAmount}&note=${encodeURIComponent('Peachy Pals ' + (b.confirmationCode || ''))}" target="_blank" class="btn btn-outline btn-sm"><i class="fab fa-vimeo-v"></i> Venmo</a>
-            <a href="https://cash.app/${CONFIG.paymentInfo.cashapp?.handle || ''}/${b.depositAmount}" target="_blank" class="btn btn-outline btn-sm"><i class="fas fa-dollar-sign"></i> Cash App</a>
-          </div>
         </div>
       ` : ''}
       <div class="booking-actions">
@@ -1735,25 +1745,10 @@ function renderMembershipPayment() {
     </p>
   `;
 
-  document.querySelectorAll('input[name="memPayMethod"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-      const info = CONFIG.paymentInfo[this.value];
-      const instrEl = document.getElementById('memPaymentInstructions');
-      if (info) {
-        let text = info.instructions.replace('deposit', 'first monthly payment').replace('booking confirmation code', 'membership reference code');
-        instrEl.innerHTML = text + '<p style="margin-top:0.75rem;font-size:0.85rem;color:var(--gray)"><strong>Recurring payments:</strong> Our team will contact you to set up automatic monthly billing through your selected payment method.</p>';
-      }
-    });
-  });
+  initSquareCardForm('squareCardMembership');
 }
 
 async function submitMembership() {
-  const payMethod = document.querySelector('input[name="memPayMethod"]:checked');
-  if (!payMethod) {
-    showToast('Please select a payment method', 'error');
-    return;
-  }
-
   const plan = MEMBERSHIP_PLANS[selectedMembershipPlan];
   const siblings = parseInt(document.getElementById('memSiblings').value) || 0;
   const monthlyTotal = plan.pricePerChild + (siblings * plan.siblingFee);
@@ -1784,7 +1779,7 @@ async function submitMembership() {
     siblingFee: plan.siblingFee,
     commitment: plan.commitment,
     totalTermCost: selectedMembershipPlan === 'annual' ? monthlyTotal * 12 : null,
-    paymentMethod: payMethod.value,
+    paymentMethod: 'square',
     agreedToTerms: true,
     status: 'pending',
     createdAt: new Date().toISOString()
@@ -1808,7 +1803,7 @@ async function submitMembership() {
         <p><strong>Children:</strong> ${childrenHtml}</p>
         <p><strong>Monthly Charge:</strong> $${monthlyTotal}/month</p>
         ${selectedMembershipPlan === 'annual' ? `<p><strong>Commitment:</strong> 12 months ($${monthlyTotal * 12} total)</p>` : '<p><strong>Type:</strong> Month-to-month (cancel anytime with 30 days notice)</p>'}
-        <p><strong>Payment:</strong> ${CONFIG.paymentInfo[payMethod.value]?.label || payMethod.value}</p>
+        <p><strong>Payment:</strong> Card (Square)</p>
       </div>
       <p style="color:var(--gray);font-size:0.9rem;margin-bottom:1.5rem">
         Our team will contact you within 24 hours to finalize your recurring payment setup. Save your reference code for your records!
@@ -1841,6 +1836,29 @@ function resetMembershipForm() {
 // SQUARE PAYMENTS & EMAIL
 // ==========================================
 let squareCard = null;
+let squarePayments = null;
+
+async function initSquareCardForm(containerId) {
+  if (!CONFIG.squareAppId || !CONFIG.squareLocationId) return;
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  try {
+    if (typeof Square === 'undefined') {
+      container.innerHTML = '<p style="color:var(--gray);font-size:0.85rem">Loading payment form...</p>';
+      await new Promise(r => { const check = setInterval(() => { if (typeof Square !== 'undefined') { clearInterval(check); r(); } }, 200); setTimeout(() => { clearInterval(check); r(); }, 5000); });
+    }
+    if (typeof Square === 'undefined') {
+      container.innerHTML = '<p style="color:var(--gray);font-size:0.85rem">Card payment unavailable. You can pay later via Manage Booking.</p>';
+      return;
+    }
+    squarePayments = Square.payments(CONFIG.squareAppId, CONFIG.squareLocationId);
+    squareCard = await squarePayments.card();
+    await squareCard.attach('#' + containerId);
+  } catch (e) {
+    console.warn('Square card init failed:', e);
+    container.innerHTML = '<p style="color:var(--gray);font-size:0.85rem">Card form unavailable. You can pay later via Manage Booking.</p>';
+  }
+}
 
 async function renderSquarePayButton(containerId, amount, confirmCode, bookingId) {
   if (!CONFIG.squareAppId || !CONFIG.squareLocationId) return;
