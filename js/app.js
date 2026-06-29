@@ -30,7 +30,7 @@ const CONFIG = {
   // Square — credentials from developer.squareup.com
   squareAppId: 'sandbox-sq0idb-jjkI_jNaTY8szwrHO6rwVg',
   squareLocationId: 'LDFD5P82KMCHA',
-  squarePayEndpoint: '',    // paste your Cloudflare Worker URL here after deploying square-worker.js
+  squarePayEndpoint: 'https://peachypals.demarkuswilsone.workers.dev/',
   // Payment handles — owner should update these
   paymentInfo: {
     paypal: { label: 'PayPal', handle: 'info@peachypalsplay.com', instructions: 'Send deposit to <strong>info@peachypalsplay.com</strong> via PayPal. Include your booking confirmation code in the note.' },
