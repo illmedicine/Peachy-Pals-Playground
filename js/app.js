@@ -28,7 +28,7 @@ const CONFIG = {
   emailjsServiceId: '',   // paste your service ID here
   emailjsTemplateId: '',  // paste your template ID here
   // Square — credentials from developer.squareup.com
-  squareAppId: 'sandbox-sq0idb-jjkI_jNaTY8szwrHO6rwVg',
+  squareAppId: 'sq0idp-gb_Qngy_Jm08W61I4eMEFw',
   squareLocationId: 'LDFD5P82KMCHA',
   squarePayEndpoint: 'https://peachypals.demarkuswilsone.workers.dev/',
   paymentLabel: 'Square (Card)'
