@@ -22,7 +22,8 @@ const CONFIG = {
   },
   weekdayPriceDays: ['Tuesday', 'Wednesday', 'Thursday'],
   businessPhone: '(770) 387-1020',
-  businessEmail: 'info@peachypalsplay.com',
+  businessEmail: 'info@kdconcierge.com',
+  web3formsKey: '753e859f-90fd-491d-8678-c358b6d9996d',
   // EmailJS config — sign up free at emailjs.com, create a service + template
   emailjsPublicKey: '',   // paste your public key here
   emailjsServiceId: '',   // paste your service ID here
