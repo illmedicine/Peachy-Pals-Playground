@@ -11,7 +11,8 @@
 //     "packages": { ".read": true, ".write": true },
 //     "memberships": { ".read": true, ".write": true },
 //     "services": { ".read": true, ".write": true },
-//     "blockedDates": { ".read": true, ".write": true }
+//     "blockedDates": { ".read": true, ".write": true },
+//     "waivers": { ".read": true, ".write": true }
 //   }
 // }
 //
@@ -424,10 +425,66 @@ const DataStore = {
       { title: "Memberships", price: "From $55", priceNote: "/mo", description: "Unlimited visits! Monthly: $65/child. Annual: $55/child. +$20/mo per additional sibling.", imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "View Memberships", buttonAction: "navigate('memberships')", sortOrder: 3 },
       { title: "Field Trips", price: "", priceNote: "", description: "Schools, daycares, camps & homeschool groups welcome for structured group play.", imageUrl: "https://images.unsplash.com/photo-1472162072942-cd5147eb3902?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "Inquire Now", buttonAction: "mailto:info@peachypalsplay.com", sortOrder: 4 },
       { title: "Balloon Bar", price: "From $3", priceNote: "", description: "Helium fill-up $3–$5. Mini bundles from $15. Custom bouquets from $35. Characters from $10.", imageUrl: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "", buttonAction: "", sortOrder: 5 },
-      { title: "Digital Waiver", price: "", priceNote: "", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "Sign Waiver", buttonAction: "https://peachypals.pcsparty.com/sign/", sortOrder: 6 }
+      { title: "Digital Waiver", price: "", priceNote: "", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", featured: false, buttonText: "Sign Waiver", buttonAction: "navigate('waiver')", sortOrder: 6 }
     ];
     for (const svc of defaults) await this.saveService(svc);
     console.log("✅ Default services seeded");
+  },
+
+  // --- WAIVERS ---
+  async createWaiver(waiver) {
+    waiver.createdAt = new Date().toISOString();
+    waiver.waiverId = 'WVR-' + Date.now().toString(36).toUpperCase().slice(-6);
+    if (isFirebaseConfigured) {
+      const ref = this._ref('waivers').push();
+      await ref.set(waiver);
+      return { id: ref.key, ...waiver };
+    }
+    const waivers = JSON.parse(localStorage.getItem('pp_waivers') || '[]');
+    waiver.id = 'wvr_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+    waivers.push(waiver);
+    localStorage.setItem('pp_waivers', JSON.stringify(waivers));
+    return waiver;
+  },
+
+  async getAllWaivers() {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('waivers').orderByChild('createdAt').once('value');
+      return this._snapToArray(snap).reverse();
+    }
+    return JSON.parse(localStorage.getItem('pp_waivers') || '[]').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async findWaiversByPhone(phone) {
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('waivers').once('value');
+      return this._snapToArray(snap)
+        .filter(w => w.phone && w.phone.replace(/\D/g, '') === cleanPhone)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+    const waivers = JSON.parse(localStorage.getItem('pp_waivers') || '[]');
+    return waivers.filter(w => w.phone && w.phone.replace(/\D/g, '') === cleanPhone)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getWaiversByBooking(bookingId) {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('waivers').orderByChild('bookingId').equalTo(bookingId).once('value');
+      return this._snapToArray(snap);
+    }
+    const waivers = JSON.parse(localStorage.getItem('pp_waivers') || '[]');
+    return waivers.filter(w => w.bookingId === bookingId);
+  },
+
+  async deleteWaiver(id) {
+    if (isFirebaseConfigured) {
+      await this._ref('waivers/' + id).remove();
+      return;
+    }
+    let waivers = JSON.parse(localStorage.getItem('pp_waivers') || '[]');
+    waivers = waivers.filter(w => w.id !== id);
+    localStorage.setItem('pp_waivers', JSON.stringify(waivers));
   },
 
   // --- SEED DEFAULT PACKAGES ---

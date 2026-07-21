@@ -287,7 +287,7 @@
             <h4>Contact</h4>
             <a href="tel:+17703871020">(770) 387-1020</a>
             <a href="mailto:info@peachypalsplay.com">info@peachypalsplay.com</a>
-            <a href="https://peachypals.pcsparty.com/sign/" target="_blank" rel="noopener">Sign Waiver</a>
+            <a href="#waiver" onclick="navigate('waiver')">Sign Waiver</a>
           </div>
         </div>
         <div class="footer-bottom">
@@ -456,6 +456,112 @@
   </div>
 
   <!-- ====================================================== -->
+  <!-- =================== WAIVER VIEW ====================== -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-waiver">
+    <section class="page-header">
+      <h1><i class="fas fa-file-signature"></i> Sign Waiver</h1>
+      <p>Complete once, play all year! Fast, easy, and good for 12 months.</p>
+    </section>
+    <section class="container waiver-container">
+
+      <!-- Waiver Form -->
+      <div class="waiver-form-box" id="waiverFormBox">
+        <h2><i class="fas fa-user"></i> Signer Information</h2>
+        <p style="color:var(--gray);margin-bottom:1rem">Parent or legal guardian must sign for all minors.</p>
+        <form id="waiverForm" class="booking-form" onsubmit="return false">
+          <div class="form-row">
+            <div class="form-group"><label>First Name *</label><input type="text" id="wvFirstName" required></div>
+            <div class="form-group"><label>Last Name *</label><input type="text" id="wvLastName" required></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Phone Number *</label><input type="tel" id="wvPhone" required placeholder="(xxx) xxx-xxxx"></div>
+            <div class="form-group"><label>Email</label><input type="email" id="wvEmail" placeholder="optional"></div>
+          </div>
+
+          <!-- Children covered by this waiver -->
+          <h3 style="margin:1.5rem 0 0.5rem"><i class="fas fa-child" style="color:var(--peach)"></i> Children Covered by This Waiver</h3>
+          <div id="waiverChildrenList">
+            <div class="waiver-child-row form-row" data-child-index="0">
+              <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
+              <div class="form-group" style="flex:0.5"><label>Age *</label><input type="number" class="wv-child-age" min="0" max="12" required></div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-outline btn-sm" onclick="addWaiverChild()" style="margin-top:0.5rem"><i class="fas fa-plus"></i> Add Another Child</button>
+
+          <!-- Booking Association -->
+          <h3 style="margin:1.5rem 0 0.5rem"><i class="fas fa-link" style="color:var(--teal)"></i> Associate with a Booked Party <small style="font-weight:400;color:var(--gray)">(optional)</small></h3>
+          <p style="color:var(--gray);font-size:0.85rem;margin-bottom:0.75rem">If you have a booked party, you can link this waiver to it. Otherwise, skip this section.</p>
+          <div class="waiver-booking-toggle">
+            <label class="waiver-radio-label"><input type="radio" name="wvBookingType" value="none" checked onchange="toggleWaiverBooking('none')"> No booking / I don't know</label>
+            <label class="waiver-radio-label"><input type="radio" name="wvBookingType" value="lookup" onchange="toggleWaiverBooking('lookup')"> Look up my booking</label>
+          </div>
+          <div id="waiverBookingLookup" style="display:none;margin-top:1rem">
+            <p style="font-size:0.85rem;color:var(--gray);margin-bottom:0.5rem">Enter the phone number and last name used when booking:</p>
+            <div class="form-row">
+              <div class="form-group"><label>Booking Last Name</label><input type="text" id="wvBookingLastName" placeholder="Last name on booking"></div>
+              <div class="form-group"><label>Booking Phone</label><input type="tel" id="wvBookingPhone" placeholder="(xxx) xxx-xxxx"></div>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="lookupWaiverBooking()"><i class="fas fa-search"></i> Find Booking</button>
+            <div id="wvBookingResults" style="margin-top:0.75rem"></div>
+          </div>
+
+          <!-- Waiver Agreement Text -->
+          <div class="waiver-legal-section">
+            <h3><i class="fas fa-scroll" style="color:var(--peach)"></i> Waiver, Release, and Assumption of Risk</h3>
+            <div class="waiver-legal-text">
+              <p><strong>PLEASE READ CAREFULLY BEFORE SIGNING</strong></p>
+
+              <p>In consideration of being permitted to enter and use the play facilities, equipment, and services at <strong>Peachy Pals Playland</strong>, located at 801 West Ave Suite 201, Cartersville, Georgia 30120 ("Facility"), the undersigned participant/parent/legal guardian ("Signer") hereby acknowledges, agrees, and represents as follows:</p>
+
+              <p><strong>1. ASSUMPTION OF RISK.</strong> Signer acknowledges that participation in indoor play activities, including but not limited to climbing structures, slides, ball pits, trampolines, inflatable equipment, arts and crafts, and other play equipment, involves inherent risks of physical injury. These risks include, but are not limited to: falls, collisions with other participants or equipment, sprains, fractures, bruises, scrapes, and other injuries that may occur during play activities. Signer voluntarily assumes all risks associated with participation, whether known or unknown.</p>
+
+              <p><strong>2. WAIVER AND RELEASE.</strong> Signer, on behalf of themselves and any minor children listed on this waiver, hereby releases, waives, discharges, and agrees not to sue Peachy Pals Playland, its owners, officers, directors, employees, agents, contractors, representatives, successors, and assigns ("Released Parties") from any and all liability, claims, demands, causes of action, costs, and expenses arising out of or relating to any injury, illness, damage, or loss sustained by the participant(s) during or as a result of participation in any activities at the Facility, however caused, including but not limited to the negligence of the Released Parties.</p>
+
+              <p><strong>3. INDEMNIFICATION.</strong> Signer agrees to indemnify, defend, and hold harmless the Released Parties from any and all claims, demands, suits, judgments, losses, or expenses (including attorney's fees) arising out of or relating to any injury to the participant(s) or any third party caused by the participant(s) while at the Facility.</p>
+
+              <p><strong>4. MEDICAL AUTHORIZATION.</strong> In the event of an emergency, Signer authorizes the Facility staff to secure emergency medical treatment for the participant(s) if the Signer cannot be reached. Signer agrees to assume responsibility for all medical costs incurred.</p>
+
+              <p><strong>5. FACILITY RULES.</strong> Signer acknowledges that all participants must follow the Facility's posted rules and staff instructions at all times. Grippy socks are required for all participants. Children must be supervised by an adult at all times. The Facility reserves the right to remove any participant who does not comply with the rules.</p>
+
+              <p><strong>6. PHOTO/VIDEO CONSENT.</strong> Signer grants the Facility permission to use photographs or video of the participant(s) taken during their visit for promotional and marketing purposes, unless Signer notifies the Facility in writing at the time of visit that they do not consent.</p>
+
+              <p><strong>7. VALIDITY.</strong> This waiver is valid for twelve (12) months from the date of signing and applies to all visits during that period. Signer must sign a new waiver upon expiration.</p>
+
+              <p><strong>8. GOVERNING LAW.</strong> This waiver shall be governed by and construed in accordance with the laws of the State of Georgia. Any disputes shall be subject to the jurisdiction of the courts in Bartow County, Georgia.</p>
+
+              <p><strong>9. SEVERABILITY.</strong> If any provision of this waiver is found to be unenforceable, the remaining provisions shall continue in full force and effect.</p>
+            </div>
+          </div>
+
+          <!-- Agreement Checkbox & Signature -->
+          <div class="waiver-signature-section">
+            <label class="agreement-checkbox">
+              <input type="checkbox" id="wvAgreeTerms" onchange="updateWaiverSubmitBtn()">
+              <span>I, the undersigned, have read this Waiver, Release, and Assumption of Risk in its entirety. I understand and voluntarily agree to its terms on behalf of myself and all minor children listed above. I acknowledge that by checking this box, I am electronically signing this waiver with the same legal effect as a handwritten signature.</span>
+            </label>
+            <div class="form-group" style="margin-top:1rem">
+              <label>Type Your Full Legal Name as Signature *</label>
+              <input type="text" id="wvSignature" class="signature-input" placeholder="Type your full name" oninput="updateWaiverSubmitBtn()">
+            </div>
+          </div>
+
+          <div class="step-nav" style="margin-top:1.5rem">
+            <button class="btn btn-outline" onclick="navigate('home')"><i class="fas fa-arrow-left"></i> Back Home</button>
+            <button class="btn btn-primary btn-xl" id="btnSubmitWaiver" disabled onclick="submitWaiver()"><i class="fas fa-file-signature"></i> Sign Waiver</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Waiver Confirmation (hidden initially) -->
+      <div id="waiverConfirmation" style="display:none">
+        <!-- Populated by JS -->
+      </div>
+
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
   <!-- =================== ADMIN VIEW ======================= -->
   <!-- ====================================================== -->
   <div class="view" id="view-admin">
@@ -490,6 +596,7 @@
           <button class="admin-tab active" data-tab="adminBookings" onclick="adminSwitchTab('adminBookings')"><i class="fas fa-calendar-alt"></i> Bookings</button>
           <button class="admin-tab" data-tab="adminPackages" onclick="adminSwitchTab('adminPackages')"><i class="fas fa-gift"></i> Packages</button>
           <button class="admin-tab" data-tab="adminServices" onclick="adminSwitchTab('adminServices')"><i class="fas fa-images"></i> Services</button>
+          <button class="admin-tab" data-tab="adminWaivers" onclick="adminSwitchTab('adminWaivers')"><i class="fas fa-file-signature"></i> Waivers</button>
           <button class="admin-tab" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
         </div>
 
@@ -525,6 +632,29 @@
           </div>
           <p style="color:var(--gray);margin-bottom:1rem">Click a card's photo to upload a new image. Edit text inline.</p>
           <div id="adminServicesList" class="admin-services-grid"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: Waivers -->
+        <div class="admin-panel" id="adminWaivers">
+          <div class="admin-panel-header">
+            <h2>Signed Waivers</h2>
+          </div>
+          <div class="waiver-search-bar">
+            <form onsubmit="searchAdminWaivers(); return false;" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end">
+              <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0">
+                <label>Search by Phone Number</label>
+                <input type="tel" id="adminWaiverSearch" placeholder="(xxx) xxx-xxxx">
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> Search</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="loadAdminWaivers()"><i class="fas fa-list"></i> Show All</button>
+            </form>
+          </div>
+          <div id="adminWaiverSearchResults" style="display:none;margin-top:1rem">
+            <!-- Phone search results: matching waivers + bookings -->
+          </div>
+          <div id="adminWaiversList" class="admin-waivers-list" style="margin-top:1rem">
+            <!-- All waivers list -->
+          </div>
         </div>
 
         <div class="admin-panel" id="adminAvailability">

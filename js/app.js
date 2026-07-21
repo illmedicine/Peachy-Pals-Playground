@@ -61,7 +61,7 @@ function navigate(view) {
 
 function handleRoute() {
   const hash = window.location.hash.slice(1) || 'home';
-  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'admin'];
+  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin'];
   const view = validViews.includes(hash) ? hash : 'home';
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -80,6 +80,7 @@ function handleRoute() {
   if (view === 'packages') renderPackagesDetail();
   if (view === 'booking') { renderBookingPackages(); bookingStep(1); }
   if (view === 'memberships') { initMembershipView(); }
+  if (view === 'waiver') initWaiverView();
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
 }
 
@@ -210,7 +211,7 @@ function renderFallbackServices() {
     { title: "Memberships", price: "From $55", priceNote: "/mo", description: "Unlimited visits! Monthly: $65/child. Annual: $55/child. +$20/mo per additional sibling.", imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format", buttonText: "View Memberships", buttonAction: "navigate('memberships')" },
     { title: "Field Trips", description: "Schools, daycares, camps & homeschool groups welcome for structured group play.", imageUrl: "https://images.unsplash.com/photo-1472162072942-cd5147eb3902?w=600&h=300&fit=crop&auto=format", buttonText: "Inquire Now", buttonAction: "mailto:info@peachypalsplay.com" },
     { title: "Balloon Bar", price: "From $3", description: "Helium fill-up $3–$5. Mini bundles from $15. Custom bouquets from $35. Characters from $10.", imageUrl: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=600&h=300&fit=crop&auto=format" },
-    { title: "Digital Waiver", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", buttonText: "Sign Waiver", buttonAction: "https://peachypals.pcsparty.com/sign/" }
+    { title: "Digital Waiver", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", buttonText: "Sign Waiver", buttonAction: "navigate('waiver')" }
   ];
   return fallback.map(svc => {
     let btnHtml = '';
@@ -1045,6 +1046,7 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminBookings') loadAdminBookings();
   if (tabId === 'adminPackages') loadAdminPackages();
   if (tabId === 'adminServices') loadAdminServices();
+  if (tabId === 'adminWaivers') loadAdminWaivers();
   if (tabId === 'adminAvailability') initAdminCalendar();
 }
 
@@ -1830,6 +1832,346 @@ function resetMembershipForm() {
   document.getElementById('siblingNamesContainer').innerHTML = '';
   document.getElementById('siblingNamesContainer').style.display = 'none';
   document.querySelectorAll('.mem-plan-card').forEach(c => c.classList.remove('selected'));
+}
+
+// ==========================================
+// WAIVER SYSTEM
+// ==========================================
+let selectedWaiverBooking = null;
+
+function initWaiverView() {
+  selectedWaiverBooking = null;
+  document.getElementById('waiverFormBox').style.display = 'block';
+  document.getElementById('waiverConfirmation').style.display = 'none';
+  document.getElementById('waiverForm').reset();
+  document.getElementById('waiverChildrenList').innerHTML = `
+    <div class="waiver-child-row form-row" data-child-index="0">
+      <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
+      <div class="form-group" style="flex:0.5"><label>Age *</label><input type="number" class="wv-child-age" min="0" max="12" required></div>
+    </div>`;
+  document.getElementById('wvBookingResults').innerHTML = '';
+  document.getElementById('waiverBookingLookup').style.display = 'none';
+  document.querySelector('input[name="wvBookingType"][value="none"]').checked = true;
+  updateWaiverSubmitBtn();
+
+  const phoneEl = document.getElementById('wvPhone');
+  if (phoneEl && !phoneEl._formatted) {
+    phoneEl._formatted = true;
+    phoneEl.addEventListener('input', function () {
+      let v = this.value.replace(/\D/g, '');
+      if (v.length > 10) v = v.slice(0, 10);
+      if (v.length >= 7) this.value = `(${v.slice(0, 3)}) ${v.slice(3, 6)}-${v.slice(6)}`;
+      else if (v.length >= 4) this.value = `(${v.slice(0, 3)}) ${v.slice(3)}`;
+      else if (v.length > 0) this.value = `(${v}`;
+    });
+  }
+  const bkPhoneEl = document.getElementById('wvBookingPhone');
+  if (bkPhoneEl && !bkPhoneEl._formatted) {
+    bkPhoneEl._formatted = true;
+    bkPhoneEl.addEventListener('input', function () {
+      let v = this.value.replace(/\D/g, '');
+      if (v.length > 10) v = v.slice(0, 10);
+      if (v.length >= 7) this.value = `(${v.slice(0, 3)}) ${v.slice(3, 6)}-${v.slice(6)}`;
+      else if (v.length >= 4) this.value = `(${v.slice(0, 3)}) ${v.slice(3)}`;
+      else if (v.length > 0) this.value = `(${v}`;
+    });
+  }
+}
+
+function addWaiverChild() {
+  const list = document.getElementById('waiverChildrenList');
+  const idx = list.querySelectorAll('.waiver-child-row').length;
+  const row = document.createElement('div');
+  row.className = 'waiver-child-row form-row';
+  row.dataset.childIndex = idx;
+  row.innerHTML = `
+    <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
+    <div class="form-group" style="flex:0.5"><label>Age *</label><input type="number" class="wv-child-age" min="0" max="12" required></div>
+    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="align-self:flex-end;margin-bottom:0.5rem;padding:0.4rem 0.6rem" title="Remove child">&times;</button>
+  `;
+  list.appendChild(row);
+}
+
+function toggleWaiverBooking(type) {
+  const lookupDiv = document.getElementById('waiverBookingLookup');
+  lookupDiv.style.display = type === 'lookup' ? 'block' : 'none';
+  if (type === 'none') {
+    selectedWaiverBooking = null;
+    document.getElementById('wvBookingResults').innerHTML = '';
+  }
+}
+
+async function lookupWaiverBooking() {
+  const lastName = document.getElementById('wvBookingLastName').value.trim();
+  const phone = document.getElementById('wvBookingPhone').value.trim();
+  const resultsDiv = document.getElementById('wvBookingResults');
+
+  if (!lastName || !phone) {
+    showToast('Please enter both last name and phone number', 'error');
+    return;
+  }
+
+  try {
+    const bookings = await DataStore.findBookings(phone, lastName);
+    _waiverLookupResults = bookings;
+    if (bookings.length === 0) {
+      resultsDiv.innerHTML = '<p style="color:var(--gray);font-size:0.85rem;padding:0.5rem">No bookings found. You can still sign the waiver without a booking.</p>';
+      selectedWaiverBooking = null;
+      return;
+    }
+    resultsDiv.innerHTML = '<p style="font-weight:700;margin-bottom:0.5rem">Select a booking:</p>' +
+      bookings.filter(b => b.status !== 'cancelled').map(b => `
+        <div class="waiver-booking-option ${selectedWaiverBooking?.id === b.id ? 'selected' : ''}" onclick="selectWaiverBooking('${b.id}')">
+          <div style="font-weight:700">${escapeHtml(b.packageName || 'Party')} — ${b.confirmationCode || 'N/A'}</div>
+          <div style="font-size:0.85rem;color:var(--gray)">${formatDateDisplay(b.date)} at ${b.timeSlot} | ${escapeHtml(b.childName || '')}</div>
+        </div>
+      `).join('');
+  } catch (err) {
+    console.error('Waiver booking lookup error:', err);
+    showToast('Error looking up bookings.', 'error');
+  }
+}
+
+let _waiverLookupResults = [];
+
+function selectWaiverBooking(bookingId) {
+  selectedWaiverBooking = _waiverLookupResults.find(b => b.id === bookingId) || null;
+  const resultsDiv = document.getElementById('wvBookingResults');
+  resultsDiv.querySelectorAll('.waiver-booking-option').forEach(el => el.classList.remove('selected'));
+  if (selectedWaiverBooking) {
+    resultsDiv.querySelectorAll('.waiver-booking-option').forEach(el => {
+      if (el.querySelector('div').textContent.includes(selectedWaiverBooking.confirmationCode)) {
+        el.classList.add('selected');
+      }
+    });
+    showToast('Booking selected: ' + selectedWaiverBooking.confirmationCode, 'success');
+  }
+}
+
+function updateWaiverSubmitBtn() {
+  const agreed = document.getElementById('wvAgreeTerms')?.checked;
+  const sig = document.getElementById('wvSignature')?.value.trim();
+  const btn = document.getElementById('btnSubmitWaiver');
+  if (btn) btn.disabled = !(agreed && sig);
+}
+
+function getWaiverChildren() {
+  const rows = document.querySelectorAll('.waiver-child-row');
+  const children = [];
+  rows.forEach(row => {
+    const name = row.querySelector('.wv-child-name')?.value.trim();
+    const age = parseInt(row.querySelector('.wv-child-age')?.value) || 0;
+    if (name) children.push({ name, age });
+  });
+  return children;
+}
+
+async function submitWaiver() {
+  const firstName = document.getElementById('wvFirstName').value.trim();
+  const lastName = document.getElementById('wvLastName').value.trim();
+  const phone = document.getElementById('wvPhone').value.trim();
+  const email = document.getElementById('wvEmail').value.trim();
+  const signature = document.getElementById('wvSignature').value.trim();
+  const children = getWaiverChildren();
+
+  if (!firstName || !lastName || !phone) {
+    showToast('Please fill in your name and phone number', 'error');
+    return;
+  }
+  if (children.length === 0) {
+    showToast('Please add at least one child', 'error');
+    return;
+  }
+  if (!document.getElementById('wvAgreeTerms').checked || !signature) {
+    showToast('Please agree to the waiver and type your signature', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitWaiver');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+
+  const now = new Date();
+  const waiver = {
+    firstName,
+    lastName,
+    phone,
+    email,
+    children,
+    signature,
+    signedAt: now.toISOString(),
+    expiresAt: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()).toISOString(),
+    bookingId: selectedWaiverBooking?.id || null,
+    confirmationCode: selectedWaiverBooking?.confirmationCode || null,
+    bookingDate: selectedWaiverBooking?.date || null,
+    bookingPackage: selectedWaiverBooking?.packageName || null,
+    status: 'active'
+  };
+
+  try {
+    const result = await DataStore.createWaiver(waiver);
+    launchConfetti();
+    showToast('Waiver signed successfully!', 'success');
+
+    const childrenHtml = children.map(c => `${escapeHtml(c.name)} (Age ${c.age})`).join(', ');
+    const signedDate = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const signedTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const expiresDate = new Date(waiver.expiresAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    document.getElementById('waiverFormBox').style.display = 'none';
+    const confirmDiv = document.getElementById('waiverConfirmation');
+    confirmDiv.style.display = 'block';
+    confirmDiv.innerHTML = `
+      <div class="confirmation-box">
+        <div style="font-size:4rem;margin-bottom:1rem">&#9989;</div>
+        <h2>Waiver Signed Successfully!</h2>
+        <p style="color:var(--gray);margin-bottom:1rem">Your waiver has been recorded. Here's your waiver reference:</p>
+        <div class="confirmation-code">${result.waiverId}</div>
+        <div style="text-align:left;margin:1.5rem 0;padding:1rem;background:var(--cream);border-radius:var(--radius)">
+          <p><strong>Signed By:</strong> ${escapeHtml(firstName)} ${escapeHtml(lastName)}</p>
+          <p><strong>Phone:</strong> ${escapeHtml(phone)}</p>
+          <p><strong>Children:</strong> ${childrenHtml}</p>
+          <p><strong>Date Signed:</strong> ${signedDate} at ${signedTime}</p>
+          <p><strong>Valid Until:</strong> ${expiresDate}</p>
+          ${selectedWaiverBooking ? `
+            <hr style="margin:0.75rem 0">
+            <p><strong>Linked Booking:</strong> ${selectedWaiverBooking.confirmationCode}</p>
+            <p><strong>Party Date:</strong> ${formatDateDisplay(selectedWaiverBooking.date)} at ${selectedWaiverBooking.timeSlot}</p>
+          ` : `
+            <hr style="margin:0.75rem 0">
+            <p><strong>Record Locator:</strong> ${signedDate} at ${signedTime}</p>
+          `}
+        </div>
+        <p style="color:var(--gray);font-size:0.9rem;margin-bottom:1.5rem">
+          This waiver is valid for <strong>12 months</strong>. Save your waiver reference for your records.
+          Your waiver can be looked up anytime using your phone number.
+        </p>
+        <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="navigate('home')"><i class="fas fa-home"></i> Back Home</button>
+          <button class="btn btn-secondary" onclick="navigate('waiver')"><i class="fas fa-file-signature"></i> Sign Another Waiver</button>
+        </div>
+      </div>
+    `;
+    confirmDiv.scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    console.error('Waiver submission error:', err);
+    showToast('Error submitting waiver. Please try again.', 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-file-signature"></i> Sign Waiver';
+  }
+}
+
+// Admin: Waivers
+async function loadAdminWaivers() {
+  document.getElementById('adminWaiverSearchResults').style.display = 'none';
+  document.getElementById('adminWaiverSearch').value = '';
+  const waivers = await DataStore.getAllWaivers();
+  const list = document.getElementById('adminWaiversList');
+  if (waivers.length === 0) {
+    list.innerHTML = '<div class="no-bookings-msg">No waivers signed yet.</div>';
+    return;
+  }
+  list.innerHTML = `<p style="font-weight:700;margin-bottom:0.75rem">${waivers.length} Total Waiver${waivers.length !== 1 ? 's' : ''}</p>` +
+    waivers.map(w => renderWaiverCard(w)).join('');
+}
+
+async function searchAdminWaivers() {
+  const phone = document.getElementById('adminWaiverSearch').value.trim();
+  if (!phone) {
+    showToast('Please enter a phone number to search', 'error');
+    return;
+  }
+  const cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length < 3) {
+    showToast('Please enter at least 3 digits', 'error');
+    return;
+  }
+
+  const resultsDiv = document.getElementById('adminWaiverSearchResults');
+  resultsDiv.style.display = 'block';
+  resultsDiv.innerHTML = '<p style="color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Searching...</p>';
+
+  try {
+    const [waivers, allBookings] = await Promise.all([
+      DataStore.findWaiversByPhone(phone),
+      DataStore.getAllBookings()
+    ]);
+
+    const matchingBookings = allBookings.filter(b =>
+      b.phone && b.phone.replace(/\D/g, '') === cleanPhone
+    );
+
+    let html = `<h3 style="margin-bottom:1rem"><i class="fas fa-search"></i> Results for ${escapeHtml(phone)}</h3>`;
+
+    if (matchingBookings.length > 0) {
+      html += `<h4 style="margin:1rem 0 0.5rem;color:var(--teal-dark)"><i class="fas fa-calendar-alt"></i> Bookings (${matchingBookings.length})</h4>`;
+      html += matchingBookings.map(b => `
+        <div class="admin-search-result-card booking">
+          <div class="search-result-header">
+            <span class="search-result-type">Booking</span>
+            <span class="booking-status status-${b.status || 'pending'}">${b.status || 'pending'}</span>
+          </div>
+          <p><strong>${escapeHtml(b.firstName || '')} ${escapeHtml(b.lastName || '')}</strong> — ${b.confirmationCode || 'N/A'}</p>
+          <p style="font-size:0.85rem;color:var(--gray)">${escapeHtml(b.packageName || '')} | ${formatDateDisplay(b.date)} at ${b.timeSlot || ''}</p>
+          <p style="font-size:0.85rem;color:var(--gray)">Child: ${escapeHtml(b.childName || '')} | Kids: ${b.numberOfKids || 0}</p>
+        </div>
+      `).join('');
+    }
+
+    if (waivers.length > 0) {
+      html += `<h4 style="margin:1rem 0 0.5rem;color:var(--peach-dark)"><i class="fas fa-file-signature"></i> Signed Waivers (${waivers.length})</h4>`;
+      html += waivers.map(w => renderWaiverCard(w)).join('');
+    }
+
+    if (waivers.length === 0 && matchingBookings.length === 0) {
+      html += '<p style="color:var(--gray);padding:1rem">No waivers or bookings found for this phone number.</p>';
+    }
+
+    resultsDiv.innerHTML = html;
+    document.getElementById('adminWaiversList').innerHTML = '';
+  } catch (err) {
+    console.error('Waiver search error:', err);
+    resultsDiv.innerHTML = '<p style="color:#e53935">Error searching. Please try again.</p>';
+  }
+}
+
+function renderWaiverCard(w) {
+  const signedDate = new Date(w.signedAt || w.createdAt);
+  const expiresDate = new Date(w.expiresAt);
+  const now = new Date();
+  const isExpired = expiresDate < now;
+  const childrenStr = (w.children || []).map(c => `${escapeHtml(c.name)} (${c.age})`).join(', ');
+
+  return `
+    <div class="admin-waiver-card ${isExpired ? 'expired' : ''}">
+      <div class="waiver-card-header">
+        <div>
+          <strong>${escapeHtml(w.firstName || '')} ${escapeHtml(w.lastName || '')}</strong>
+          <span class="waiver-id">${w.waiverId || 'N/A'}</span>
+        </div>
+        <span class="waiver-status ${isExpired ? 'expired' : 'active'}">${isExpired ? 'Expired' : 'Active'}</span>
+      </div>
+      <div class="waiver-card-body">
+        <p><i class="fas fa-phone" style="width:16px;color:var(--gray)"></i> ${escapeHtml(w.phone || '')}</p>
+        <p><i class="fas fa-child" style="width:16px;color:var(--gray)"></i> ${childrenStr || 'No children listed'}</p>
+        <p><i class="fas fa-calendar" style="width:16px;color:var(--gray)"></i> Signed: ${signedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${signedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+        <p><i class="fas fa-clock" style="width:16px;color:var(--gray)"></i> Expires: ${expiresDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+        ${w.confirmationCode ? `<p><i class="fas fa-link" style="width:16px;color:var(--teal)"></i> Linked to Booking: <strong>${escapeHtml(w.confirmationCode)}</strong></p>` : ''}
+        ${w.email ? `<p><i class="fas fa-envelope" style="width:16px;color:var(--gray)"></i> ${escapeHtml(w.email)}</p>` : ''}
+        <p><i class="fas fa-signature" style="width:16px;color:var(--gray)"></i> Signature: <em style="font-family:cursive">${escapeHtml(w.signature || '')}</em></p>
+      </div>
+      <div class="waiver-card-actions">
+        <button class="btn btn-danger btn-sm" onclick="deleteWaiverAdmin('${w.id}')"><i class="fas fa-trash"></i> Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+async function deleteWaiverAdmin(id) {
+  if (!confirm('Permanently delete this waiver record?')) return;
+  await DataStore.deleteWaiver(id);
+  showToast('Waiver deleted', 'info');
+  loadAdminWaivers();
 }
 
 // ==========================================
