@@ -1845,11 +1845,7 @@ function initWaiverView() {
   document.getElementById('waiverFormBox').style.display = 'block';
   document.getElementById('waiverConfirmation').style.display = 'none';
   document.getElementById('waiverForm').reset();
-  document.getElementById('waiverChildrenList').innerHTML = `
-    <div class="waiver-child-row form-row" data-child-index="0">
-      <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-      <div class="form-group" style="flex:0.7"><label>Age *</label><input type="text" class="wv-child-age" placeholder="e.g. 2 years or 9 months" required></div>
-    </div>`;
+  document.getElementById('waiverChildrenList').innerHTML = buildChildRow(0);
   document.getElementById('wvBookingResults').innerHTML = '';
   document.getElementById('waiverBookingLookup').style.display = 'none';
   document.querySelector('input[name="wvBookingType"][value="none"]').checked = true;
@@ -1879,18 +1875,36 @@ function initWaiverView() {
   }
 }
 
+function buildChildRow(idx, removable = false) {
+  return `
+    <div class="waiver-child-row" data-child-index="${idx}">
+      <div class="form-row" style="align-items:flex-end">
+        <div class="form-group" style="flex:2"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
+        <div class="form-group"><label>Months <small style="color:var(--gray)">(under 1 yr)</small></label><input type="number" class="wv-child-months" min="0" max="11" placeholder="0–11" oninput="exclusiveAge(this,'months')"></div>
+        <div class="age-or">or</div>
+        <div class="form-group"><label>Years <small style="color:var(--gray)">(1–100)</small></label><input type="number" class="wv-child-years" min="1" max="100" placeholder="1–100" oninput="exclusiveAge(this,'years')"></div>
+        ${removable ? `<button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.waiver-child-row').remove()" style="align-self:flex-end;margin-bottom:0.5rem;padding:0.4rem 0.6rem" title="Remove child">&times;</button>` : ''}
+      </div>
+    </div>`;
+}
+
 function addWaiverChild() {
   const list = document.getElementById('waiverChildrenList');
   const idx = list.querySelectorAll('.waiver-child-row').length;
-  const row = document.createElement('div');
-  row.className = 'waiver-child-row form-row';
-  row.dataset.childIndex = idx;
-  row.innerHTML = `
-    <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-    <div class="form-group" style="flex:0.7"><label>Age *</label><input type="text" class="wv-child-age" placeholder="e.g. 2 years or 9 months" required></div>
-    <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="align-self:flex-end;margin-bottom:0.5rem;padding:0.4rem 0.6rem" title="Remove child">&times;</button>
-  `;
-  list.appendChild(row);
+  list.insertAdjacentHTML('beforeend', buildChildRow(idx, true));
+}
+
+function exclusiveAge(el, type) {
+  const row = el.closest('.waiver-child-row');
+  if (type === 'months') {
+    const yearsEl = row.querySelector('.wv-child-years');
+    if (el.value !== '') { yearsEl.value = ''; yearsEl.disabled = true; }
+    else { yearsEl.disabled = false; }
+  } else {
+    const monthsEl = row.querySelector('.wv-child-months');
+    if (el.value !== '') { monthsEl.value = ''; monthsEl.disabled = true; }
+    else { monthsEl.disabled = false; }
+  }
 }
 
 function toggleWaiverBooking(type) {
@@ -1961,10 +1975,35 @@ function getWaiverChildren() {
   const children = [];
   rows.forEach(row => {
     const name = row.querySelector('.wv-child-name')?.value.trim();
-    const age = row.querySelector('.wv-child-age')?.value.trim();
-    if (name) children.push({ name, age: age || 'N/A' });
+    const monthsEl = row.querySelector('.wv-child-months');
+    const yearsEl = row.querySelector('.wv-child-years');
+    const months = monthsEl?.value;
+    const years = yearsEl?.value;
+    if (!name) return;
+    let age;
+    if (months !== '' && months != null && !monthsEl.disabled) {
+      const m = parseInt(months);
+      age = m === 0 ? 'Newborn' : m + (m === 1 ? ' month' : ' months');
+    } else if (years !== '' && years != null) {
+      const y = parseInt(years);
+      age = y + (y === 1 ? ' year' : ' years');
+    } else {
+      age = null;
+    }
+    children.push({ name, age });
   });
   return children;
+}
+
+function validateWaiverChildren() {
+  const children = getWaiverChildren();
+  for (const c of children) {
+    if (!c.age) {
+      showToast('Please enter an age (months or years) for each child', 'error');
+      return false;
+    }
+  }
+  return true;
 }
 
 async function submitWaiver() {
@@ -1983,6 +2022,7 @@ async function submitWaiver() {
     showToast('Please add at least one child', 'error');
     return;
   }
+  if (!validateWaiverChildren()) return;
   if (!document.getElementById('wvAgreeTerms').checked || !signature) {
     showToast('Please agree to the waiver and type your signature', 'error');
     return;

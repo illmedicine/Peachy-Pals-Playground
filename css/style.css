@@ -1196,7 +1196,28 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
   box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 .waiver-child-row {
-  position: relative;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px dashed var(--gray-light);
+}
+.waiver-child-row:last-child {
+  border-bottom: none;
+}
+.age-or {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--gray);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+input:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: var(--gray-lighter);
 }
 .waiver-booking-toggle {
   display: flex;

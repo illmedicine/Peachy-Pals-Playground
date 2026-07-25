@@ -482,9 +482,13 @@
           <!-- Children covered by this waiver -->
           <h3 style="margin:1.5rem 0 0.5rem"><i class="fas fa-child" style="color:var(--peach)"></i> Children Covered by This Waiver</h3>
           <div id="waiverChildrenList">
-            <div class="waiver-child-row form-row" data-child-index="0">
-              <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-              <div class="form-group" style="flex:0.7"><label>Age *</label><input type="text" class="wv-child-age" placeholder="e.g. 2 years or 9 months" required></div>
+            <div class="waiver-child-row" data-child-index="0">
+              <div class="form-row">
+                <div class="form-group" style="flex:2"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
+                <div class="form-group"><label>Months <small style="color:var(--gray)">(under 1 yr)</small></label><input type="number" class="wv-child-months" min="0" max="11" placeholder="0–11" oninput="exclusiveAge(this,'months')"></div>
+                <div class="age-or">or</div>
+                <div class="form-group"><label>Years <small style="color:var(--gray)">(1–100)</small></label><input type="number" class="wv-child-years" min="1" max="100" placeholder="1–100" oninput="exclusiveAge(this,'years')"></div>
+              </div>
             </div>
           </div>
           <button type="button" class="btn btn-outline btn-sm" onclick="addWaiverChild()" style="margin-top:0.5rem"><i class="fas fa-plus"></i> Add Another Child</button>
