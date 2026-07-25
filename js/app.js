@@ -1027,6 +1027,7 @@ function adminLogin() {
     document.getElementById('adminDashboard').style.display = 'block';
     loadAdminBookings();
     loadAdminPackages();
+    loadAdminNotifications();
     showToast('Welcome, Admin!', 'success');
   } else {
     document.getElementById('adminError').style.display = 'block';
@@ -2100,6 +2101,78 @@ async function submitWaiver() {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-file-signature"></i> Sign Waiver';
   }
+}
+
+// ==========================================
+// ADMIN NOTIFICATIONS
+// ==========================================
+let notifPanelOpen = false;
+
+async function loadAdminNotifications() {
+  try {
+    const notifs = await DataStore.getNotifications();
+    const unread = notifs.filter(n => !n.read).length;
+    const badge = document.getElementById('notifBadge');
+    const bell = document.getElementById('notifBell');
+    if (badge) {
+      badge.textContent = unread;
+      badge.style.display = unread > 0 ? 'flex' : 'none';
+    }
+    if (bell) bell.classList.toggle('has-unread', unread > 0);
+    renderNotifList(notifs);
+  } catch (e) {
+    console.warn('Could not load notifications:', e);
+  }
+}
+
+function renderNotifList(notifs) {
+  const list = document.getElementById('notifList');
+  if (!list) return;
+  if (notifs.length === 0) {
+    list.innerHTML = '<p style="color:var(--gray);text-align:center;padding:2rem;font-size:0.9rem">No updates yet.</p>';
+    return;
+  }
+  list.innerHTML = notifs.map(n => {
+    const date = new Date(n.createdAt);
+    const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `
+      <div class="notif-item ${n.read ? 'read' : 'unread'}" onclick="markNotifRead('${n.id}')">
+        <div class="notif-item-header">
+          <span class="notif-from"><i class="fas fa-tools"></i> ${escapeHtml(n.from || 'Illy Robotic Instruments')}</span>
+          <span class="notif-date">${dateStr} · ${timeStr}</span>
+        </div>
+        <div class="notif-title">${escapeHtml(n.title || '')}</div>
+        <div class="notif-message">${(n.message || '').replace(/\n/g, '<br>')}</div>
+        <div class="notif-actions">
+          ${!n.read ? `<span class="notif-unread-dot"></span><span style="font-size:0.75rem;color:var(--peach-dark);font-weight:700">NEW</span>` : ''}
+          <button class="btn btn-danger btn-sm notif-delete" onclick="event.stopPropagation();deleteNotif('${n.id}')" title="Dismiss"><i class="fas fa-times"></i></button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleNotifPanel() {
+  notifPanelOpen = !notifPanelOpen;
+  document.getElementById('notifPanel').classList.toggle('open', notifPanelOpen);
+  document.getElementById('notifOverlay').classList.toggle('open', notifPanelOpen);
+  if (notifPanelOpen) loadAdminNotifications();
+}
+
+async function markNotifRead(id) {
+  await DataStore.markNotificationRead(id);
+  loadAdminNotifications();
+}
+
+async function markAllNotifsRead() {
+  await DataStore.markAllNotificationsRead();
+  loadAdminNotifications();
+  showToast('All notifications marked as read', 'success');
+}
+
+async function deleteNotif(id) {
+  await DataStore.deleteNotification(id);
+  loadAdminNotifications();
 }
 
 // Admin: Waivers

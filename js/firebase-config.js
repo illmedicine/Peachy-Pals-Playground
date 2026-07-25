@@ -12,7 +12,8 @@
 //     "memberships": { ".read": true, ".write": true },
 //     "services": { ".read": true, ".write": true },
 //     "blockedDates": { ".read": true, ".write": true },
-//     "waivers": { ".read": true, ".write": true }
+//     "waivers": { ".read": true, ".write": true },
+//     "notifications": { ".read": true, ".write": true }
 //   }
 // }
 //
@@ -429,6 +430,64 @@ const DataStore = {
     ];
     for (const svc of defaults) await this.saveService(svc);
     console.log("✅ Default services seeded");
+  },
+
+  // --- NOTIFICATIONS ---
+  async getNotifications() {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('notifications').orderByChild('createdAt').once('value');
+      return this._snapToArray(snap).reverse();
+    }
+    return JSON.parse(localStorage.getItem('pp_notifications') || '[]').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async createNotification(notif) {
+    notif.createdAt = new Date().toISOString();
+    notif.read = false;
+    if (isFirebaseConfigured) {
+      const ref = this._ref('notifications').push();
+      await ref.set(notif);
+      return { id: ref.key, ...notif };
+    }
+    const notifs = JSON.parse(localStorage.getItem('pp_notifications') || '[]');
+    notif.id = 'notif_' + Date.now();
+    notifs.push(notif);
+    localStorage.setItem('pp_notifications', JSON.stringify(notifs));
+    return notif;
+  },
+
+  async markNotificationRead(id) {
+    if (isFirebaseConfigured) {
+      await this._ref('notifications/' + id).update({ read: true });
+      return;
+    }
+    const notifs = JSON.parse(localStorage.getItem('pp_notifications') || '[]');
+    const idx = notifs.findIndex(n => n.id === id);
+    if (idx >= 0) notifs[idx].read = true;
+    localStorage.setItem('pp_notifications', JSON.stringify(notifs));
+  },
+
+  async markAllNotificationsRead() {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('notifications').once('value');
+      const updates = {};
+      snap.forEach(child => { updates[child.key + '/read'] = true; });
+      if (Object.keys(updates).length) await this._ref('notifications').update(updates);
+      return;
+    }
+    const notifs = JSON.parse(localStorage.getItem('pp_notifications') || '[]');
+    notifs.forEach(n => n.read = true);
+    localStorage.setItem('pp_notifications', JSON.stringify(notifs));
+  },
+
+  async deleteNotification(id) {
+    if (isFirebaseConfigured) {
+      await this._ref('notifications/' + id).remove();
+      return;
+    }
+    let notifs = JSON.parse(localStorage.getItem('pp_notifications') || '[]');
+    notifs = notifs.filter(n => n.id !== id);
+    localStorage.setItem('pp_notifications', JSON.stringify(notifs));
   },
 
   // --- WAIVERS ---
