@@ -2143,7 +2143,7 @@ function renderNotifList(notifs) {
           <span class="notif-date">${dateStr} · ${timeStr}</span>
         </div>
         <div class="notif-title">${escapeHtml(n.title || '')}</div>
-        <div class="notif-message">${(n.message || '').replace(/\n/g, '<br>')}</div>
+        <div class="notif-message">${(n.message || n.body || '').replace(/\n/g, '<br>')}</div>
         <div class="notif-actions">
           ${!n.read ? `<span class="notif-unread-dot"></span><span style="font-size:0.75rem;color:var(--peach-dark);font-weight:700">NEW</span>` : ''}
           <button class="btn btn-danger btn-sm notif-delete" onclick="event.stopPropagation();deleteNotif('${n.id}')" title="Dismiss"><i class="fas fa-times"></i></button>
