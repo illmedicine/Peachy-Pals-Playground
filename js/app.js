@@ -1848,7 +1848,7 @@ function initWaiverView() {
   document.getElementById('waiverChildrenList').innerHTML = `
     <div class="waiver-child-row form-row" data-child-index="0">
       <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-      <div class="form-group" style="flex:0.5"><label>Age *</label><input type="number" class="wv-child-age" min="0" max="12" required></div>
+      <div class="form-group" style="flex:0.7"><label>Age *</label><input type="text" class="wv-child-age" placeholder="e.g. 2 years or 9 months" required></div>
     </div>`;
   document.getElementById('wvBookingResults').innerHTML = '';
   document.getElementById('waiverBookingLookup').style.display = 'none';
@@ -1887,7 +1887,7 @@ function addWaiverChild() {
   row.dataset.childIndex = idx;
   row.innerHTML = `
     <div class="form-group"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-    <div class="form-group" style="flex:0.5"><label>Age *</label><input type="number" class="wv-child-age" min="0" max="12" required></div>
+    <div class="form-group" style="flex:0.7"><label>Age *</label><input type="text" class="wv-child-age" placeholder="e.g. 2 years or 9 months" required></div>
     <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()" style="align-self:flex-end;margin-bottom:0.5rem;padding:0.4rem 0.6rem" title="Remove child">&times;</button>
   `;
   list.appendChild(row);
@@ -1961,8 +1961,8 @@ function getWaiverChildren() {
   const children = [];
   rows.forEach(row => {
     const name = row.querySelector('.wv-child-name')?.value.trim();
-    const age = parseInt(row.querySelector('.wv-child-age')?.value) || 0;
-    if (name) children.push({ name, age });
+    const age = row.querySelector('.wv-child-age')?.value.trim();
+    if (name) children.push({ name, age: age || 'N/A' });
   });
   return children;
 }
