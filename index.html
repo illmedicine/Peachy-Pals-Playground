@@ -56,6 +56,8 @@
         <a href="#home" onclick="scrollToId('services')">Services</a>
         <a href="#home" onclick="scrollToId('contact')">Contact</a>
         <a href="#home" onclick="scrollToId('reviews')">Reviews</a>
+        <a href="#blog" data-view="blog" onclick="navigate('blog')">Blog</a>
+        <a href="#about" data-view="about" onclick="navigate('about')">About</a>
       </div>
       <div class="nav-cta">
         <button class="btn btn-cta-book pulse-soft" onclick="navigate('booking')">
@@ -81,6 +83,8 @@
     <a href="#home" onclick="scrollToId('services');toggleMobileNav()"><i class="fas fa-star"></i> Services</a>
     <a href="#home" onclick="scrollToId('contact');toggleMobileNav()"><i class="fas fa-envelope"></i> Contact</a>
     <a href="#home" onclick="scrollToId('reviews');toggleMobileNav()"><i class="fas fa-star-half-alt"></i> Reviews</a>
+    <a href="#blog" onclick="navigate('blog');toggleMobileNav()"><i class="fas fa-book-open"></i> Blog</a>
+    <a href="#about" onclick="navigate('about');toggleMobileNav()"><i class="fas fa-heart"></i> About</a>
     <hr>
     <a href="#booking" class="mobile-book" onclick="navigate('booking');toggleMobileNav()"><i class="fas fa-birthday-cake"></i> Book a Party</a>
     <a href="#manage" class="mobile-manage" onclick="navigate('manage');toggleMobileNav()"><i class="fas fa-clipboard-list"></i> Manage Booking</a>
@@ -97,7 +101,7 @@
         <div class="hero-slide active" style="background-image: url('https://images.unsplash.com/photo-1566140967404-b8b3932483f5?w=1920&h=1080&fit=crop&auto=format')"></div>
         <div class="hero-slide" style="background-image: url('https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=1920&h=1080&fit=crop&auto=format')"></div>
         <div class="hero-slide" style="background-image: url('https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1920&h=1080&fit=crop&auto=format')"></div>
-        <div class="hero-slide" style="background-image: url('https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=1920&h=1080&fit=crop&auto=format')"></div>
+        <div class="hero-slide" style="background-image: url('https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=1920&h=1080&fit=crop&auto=format')"></div>
       </div>
       <div class="hero-overlay"></div>
       <div class="hero-container">
@@ -120,6 +124,33 @@
         </div>
       </div>
       <div class="hero-wave"><svg viewBox="0 0 1440 120" preserveAspectRatio="none"><path d="M0,64 C360,120 720,0 1080,64 C1260,96 1380,80 1440,64 L1440,120 L0,120 Z" fill="var(--cream)"/></svg></div>
+    </section>
+
+    <!-- PEACHY PIT SPOTLIGHT -->
+    <section class="peachy-pit-spotlight">
+      <div class="container">
+        <div class="pit-spotlight-inner">
+          <div class="pit-spotlight-image">
+            <div class="pit-new-badge"><i class="fas fa-star"></i> Featured Experience</div>
+            <img src="https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=700&h=520&fit=crop&auto=format" alt="Child playing in the Peachy Pit sensory sand area" loading="lazy">
+          </div>
+          <div class="pit-spotlight-content">
+            <div class="pit-eyebrow"><i class="fas fa-seedling"></i> Exclusive to Peachy Pals</div>
+            <h2>Meet the <span class="txt-gradient">Peachy Pit</span></h2>
+            <p class="pit-lead">Our one-of-a-kind indoor sensory sand area — where children of all ages dig, build, pour, and discover the magic of open-ended play.</p>
+            <div class="pit-highlights">
+              <div class="pit-highlight"><i class="fas fa-check-circle"></i> Sensory-rich learning environment</div>
+              <div class="pit-highlight"><i class="fas fa-check-circle"></i> Safe for ages 6 months and up</div>
+              <div class="pit-highlight"><i class="fas fa-check-circle"></i> Premium clean sand, sanitized daily</div>
+              <div class="pit-highlight"><i class="fas fa-check-circle"></i> Included with every visit — always</div>
+            </div>
+            <div class="pit-cta">
+              <button class="btn btn-primary" onclick="navigate('blog')"><i class="fas fa-book-open"></i> Read Our Story</button>
+              <button class="btn btn-outline" onclick="navigate('booking')"><i class="fas fa-calendar-alt"></i> Book a Visit</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ABOUT -->
@@ -284,6 +315,13 @@
             <a href="#" onclick="scrollToId('services')">Field Trips</a>
           </div>
           <div class="footer-links">
+            <h4>Behind the Play</h4>
+            <a href="#blog" onclick="navigate('blog')">Our Blog</a>
+            <a href="#about" onclick="navigate('about')">About Cherish</a>
+            <a href="#blog" onclick="navigate('blog')">Sensory Play</a>
+            <a href="#blog" onclick="navigate('blog')">Child Development</a>
+          </div>
+          <div class="footer-links">
             <h4>Contact</h4>
             <a href="tel:+17703871020">(770) 387-1020</a>
             <a href="mailto:info@peachypalsplay.com">info@peachypalsplay.com</a>
@@ -296,6 +334,125 @@
         </div>
       </div>
     </footer>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ==================== BLOG VIEW ======================= -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-blog">
+    <section class="page-header blog-page-header">
+      <div class="blog-header-inner">
+        <span class="blog-eyebrow"><i class="fas fa-book-open"></i> Behind the Play</span>
+        <h1>The <span class="txt-gradient">Peachy Family</span> Blog</h1>
+        <p>Stories, tips, and behind-the-scenes moments from our little corner of Cartersville.</p>
+      </div>
+    </section>
+
+    <section class="container blog-filter-bar">
+      <div class="blog-cats" id="blogCategoryFilter">
+        <button class="blog-cat active" data-cat="all" onclick="filterBlog('all')">All Posts</button>
+        <button class="blog-cat" data-cat="Sensory Play" onclick="filterBlog('Sensory Play')">Sensory Play</button>
+        <button class="blog-cat" data-cat="Child Development" onclick="filterBlog('Child Development')">Child Development</button>
+        <button class="blog-cat" data-cat="Behind the Scenes" onclick="filterBlog('Behind the Scenes')">Behind the Scenes</button>
+        <button class="blog-cat" data-cat="Safety &amp; Cleanliness" onclick="filterBlog('Safety &amp; Cleanliness')">Safety &amp; Cleanliness</button>
+        <button class="blog-cat" data-cat="Birthday Parties" onclick="filterBlog('Birthday Parties')">Birthday Parties</button>
+        <button class="blog-cat" data-cat="Parent Resources" onclick="filterBlog('Parent Resources')">Parent Resources</button>
+        <button class="blog-cat" data-cat="Community" onclick="filterBlog('Community')">Community</button>
+        <button class="blog-cat" data-cat="Peachy Pals News" onclick="filterBlog('Peachy Pals News')">Peachy Pals News</button>
+      </div>
+    </section>
+
+    <section class="container blog-featured-wrap" id="blogFeaturedWrap"><!-- JS --></section>
+
+    <section class="container">
+      <div class="blog-grid" id="blogGrid"><!-- JS --></div>
+      <div id="blogEmpty" class="blog-empty" style="display:none">
+        <i class="fas fa-search"></i>
+        <p>No articles found in this category yet.</p>
+      </div>
+    </section>
+
+    <section class="blog-author-banner">
+      <div class="container">
+        <div class="blog-author-inner">
+          <div class="blog-author-avatar"><i class="fas fa-user-circle"></i></div>
+          <div class="blog-author-text">
+            <h3>About the Author</h3>
+            <h4>Cherish Davis — Founder &amp; Early Childhood Educator</h4>
+            <p>Cherish Davis founded Peachy Pals Playland with over 20 years of early childhood education experience. Every feature inside Peachy Pals is intentionally designed to support children's development while creating a welcoming space for families to connect, play, imagine, and grow.</p>
+            <p class="author-tagline">Play. Imagine. Grow. 🍑</p>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="navigate('about')"><i class="fas fa-heart"></i> Full Story</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ==================== POST VIEW ======================= -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-post">
+    <div id="postArticleWrap"><!-- JS --></div>
+  </div>
+
+  <!-- ====================================================== -->
+  <!-- ==================== ABOUT VIEW ====================== -->
+  <!-- ====================================================== -->
+  <div class="view" id="view-about">
+    <section class="page-header about-page-header">
+      <h1>About <span class="txt-gradient">Peachy Pals Playland</span></h1>
+      <p>Play. Imagine. Grow. 🍑</p>
+    </section>
+    <section class="about-founder-section container">
+      <div class="founder-card">
+        <div class="founder-photo">
+          <div class="founder-photo-placeholder"><i class="fas fa-user-circle"></i></div>
+        </div>
+        <div class="founder-bio">
+          <span class="founder-eyebrow"><i class="fas fa-seedling"></i> Meet the Founder</span>
+          <h2>Cherish Davis</h2>
+          <h3>Early Childhood Educator &amp; Founder</h3>
+          <p>Hi! I'm Cherish, founder of Peachy Pals Playland and an early childhood educator with more than 20 years of experience. Every feature inside Peachy Pals is designed with one goal in mind: creating meaningful opportunities for children to play, imagine, and grow.</p>
+          <p>Cherish Davis founded Peachy Pals Playland after more than two decades working with children, families, and early learning programs throughout the region. She believes that play is the most important work a child can do — and that it's possible to build a space where that work happens beautifully, safely, and joyfully every single day.</p>
+          <p>From the Peachy Pit's sensory sand to the shoeless floor policy, every decision at Peachy Pals is rooted in child development research and a deep love for families. Cherish is on-site regularly and loves getting to know the families who call Peachy Pals their second home.</p>
+          <div class="founder-tagline">Play. Imagine. Grow. 🍑<br><small>Peachy Pals Playland — Cartersville, GA</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-mission container">
+      <h2 class="section-title">Our <span class="txt-gradient">Mission</span></h2>
+      <div class="mission-grid">
+        <div class="mission-card">
+          <div class="mission-icon"><i class="fas fa-child"></i></div>
+          <h3>Child-First Design</h3>
+          <p>Every inch of Peachy Pals is designed around how children actually learn, grow, and play — from the sensory-rich Peachy Pit to age-appropriate play zones for infants through 8-year-olds.</p>
+        </div>
+        <div class="mission-card">
+          <div class="mission-icon"><i class="fas fa-shield-alt"></i></div>
+          <h3>Safety &amp; Cleanliness</h3>
+          <p>We maintain hospital-grade cleanliness standards every day. Our shoeless policy, daily sanitization routine, and CPR-certified staff ensure a safe environment for every family.</p>
+        </div>
+        <div class="mission-card">
+          <div class="mission-icon"><i class="fas fa-users"></i></div>
+          <h3>Community &amp; Connection</h3>
+          <p>Peachy Pals is more than a play space — it's a gathering place for families. We host field trips, fundraisers, and community events because we believe families are stronger together.</p>
+        </div>
+        <div class="mission-card">
+          <div class="mission-icon"><i class="fas fa-brain"></i></div>
+          <h3>Development-Driven Play</h3>
+          <p>Every activity at Peachy Pals is grounded in early childhood development research. Play isn't just fun here — it's purposeful, meaningful, and essential.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="about-blog-cta">
+      <div class="container">
+        <h2>Read More <span class="txt-gradient">Behind the Play</span></h2>
+        <p>Cherish shares stories, research, and behind-the-scenes insights on our blog.</p>
+        <button class="btn btn-primary btn-xl" onclick="navigate('blog')"><i class="fas fa-book-open"></i> Visit Our Blog</button>
+      </div>
+    </section>
   </div>
 
   <!-- ====================================================== -->
@@ -623,6 +780,7 @@
           <button class="admin-tab" data-tab="adminServices" onclick="adminSwitchTab('adminServices')"><i class="fas fa-images"></i> Services</button>
           <button class="admin-tab" data-tab="adminWaivers" onclick="adminSwitchTab('adminWaivers')"><i class="fas fa-file-signature"></i> Waivers</button>
           <button class="admin-tab" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
+          <button class="admin-tab" data-tab="adminBlog" onclick="adminSwitchTab('adminBlog')"><i class="fas fa-book-open"></i> Blog</button>
         </div>
 
         <!-- Admin: Bookings -->
@@ -680,6 +838,15 @@
           <div id="adminWaiversList" class="admin-waivers-list" style="margin-top:1rem">
             <!-- All waivers list -->
           </div>
+        </div>
+
+        <!-- Admin: Blog -->
+        <div class="admin-panel" id="adminBlog">
+          <div class="admin-panel-header">
+            <h2>Blog Posts</h2>
+            <button class="btn btn-primary" onclick="openPostEditor()"><i class="fas fa-plus"></i> New Post</button>
+          </div>
+          <div id="adminBlogList" class="admin-blog-list"><!-- JS --></div>
         </div>
 
         <div class="admin-panel" id="adminAvailability">

@@ -62,7 +62,7 @@ function navigate(view) {
 
 function handleRoute() {
   const hash = window.location.hash.slice(1) || 'home';
-  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin'];
+  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin', 'blog', 'post', 'about'];
   const view = validViews.includes(hash) ? hash : 'home';
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -82,6 +82,8 @@ function handleRoute() {
   if (view === 'booking') { renderBookingPackages(); bookingStep(1); }
   if (view === 'memberships') { initMembershipView(); }
   if (view === 'waiver') initWaiverView();
+  if (view === 'blog') initBlogView();
+  if (view === 'post') loadCurrentPost();
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
 }
 
@@ -1050,6 +1052,7 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminServices') loadAdminServices();
   if (tabId === 'adminWaivers') loadAdminWaivers();
   if (tabId === 'adminAvailability') initAdminCalendar();
+  if (tabId === 'adminBlog') loadAdminBlog();
 }
 
 // Admin: Bookings
@@ -2459,6 +2462,247 @@ function escapeHtml(str) {
 }
 
 // ==========================================
+// BLOG
+// ==========================================
+let allBlogPosts = [];
+let currentPostId = null;
+const BLOG_CATEGORIES = ['Sensory Play','Child Development','Behind the Scenes','Safety & Cleanliness','Birthday Parties','Parent Resources','Community','Peachy Pals News'];
+
+async function initBlogView() {
+  const grid = document.getElementById('blogGrid');
+  const featured = document.getElementById('blogFeaturedWrap');
+  if (grid) grid.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--gray)">Loading articles...</p>';
+  try {
+    allBlogPosts = await DataStore.getAllPosts(true);
+    renderBlogGrid(allBlogPosts);
+  } catch(e) {
+    if (grid) grid.innerHTML = '<p style="text-align:center;color:var(--gray)">Could not load articles.</p>';
+  }
+}
+
+function filterBlog(cat) {
+  document.querySelectorAll('.blog-cat').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  const posts = cat === 'all' ? allBlogPosts : allBlogPosts.filter(p => p.category === cat);
+  renderBlogGrid(posts);
+}
+
+function renderBlogGrid(posts) {
+  const featured = document.getElementById('blogFeaturedWrap');
+  const grid = document.getElementById('blogGrid');
+  const empty = document.getElementById('blogEmpty');
+  if (!grid) return;
+
+  const featuredPost = posts.find(p => p.featured) || (posts.length ? posts[0] : null);
+  const rest = posts.filter(p => p !== featuredPost);
+
+  if (featured && featuredPost) {
+    featured.innerHTML = `
+      <div class="blog-featured-card" onclick="navigateToPost('${featuredPost.id}')">
+        <div class="blog-featured-img" style="background-image:url('${escapeHtml(featuredPost.imageUrl || '')}')">
+          <div class="blog-featured-overlay"></div>
+          <span class="blog-cat-badge">${escapeHtml(featuredPost.category || '')}</span>
+        </div>
+        <div class="blog-featured-body">
+          <div class="blog-featured-label"><i class="fas fa-star"></i> Featured Article</div>
+          <h2>${escapeHtml(featuredPost.title)}</h2>
+          <p>${escapeHtml(featuredPost.excerpt || '')}</p>
+          <div class="blog-meta">
+            <span><i class="fas fa-calendar-alt"></i> ${formatPostDate(featuredPost.publishDate)}</span>
+            <span><i class="fas fa-user"></i> Cherish Davis</span>
+          </div>
+          <button class="btn btn-primary btn-sm">Read Article <i class="fas fa-arrow-right"></i></button>
+        </div>
+      </div>`;
+    featured.style.display = '';
+  } else if (featured) {
+    featured.innerHTML = '';
+  }
+
+  if (!rest.length && !featuredPost) {
+    grid.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  grid.innerHTML = rest.map(p => `
+    <div class="blog-card" onclick="navigateToPost('${p.id}')">
+      <div class="blog-card-img" style="background-image:url('${escapeHtml(p.imageUrl || '')}')">
+        <span class="blog-cat-badge">${escapeHtml(p.category || '')}</span>
+      </div>
+      <div class="blog-card-body">
+        <div class="blog-meta"><span><i class="fas fa-calendar-alt"></i> ${formatPostDate(p.publishDate)}</span></div>
+        <h3>${escapeHtml(p.title)}</h3>
+        <p>${escapeHtml(p.excerpt || '')}</p>
+        <span class="blog-read-more">Read More <i class="fas fa-arrow-right"></i></span>
+      </div>
+    </div>`).join('');
+}
+
+function navigateToPost(id) {
+  currentPostId = id;
+  navigate('post');
+}
+
+async function loadCurrentPost() {
+  const wrap = document.getElementById('postArticleWrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<p style="text-align:center;padding:4rem;color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+  try {
+    if (!allBlogPosts.length) allBlogPosts = await DataStore.getAllPosts(true);
+    const post = currentPostId ? await DataStore.getPost(currentPostId) : null;
+    if (!post) { wrap.innerHTML = '<p style="text-align:center;padding:4rem">Article not found.</p>'; return; }
+
+    const sorted = [...allBlogPosts].sort((a,b) => new Date(b.publishDate) - new Date(a.publishDate));
+    const idx = sorted.findIndex(p => p.id === post.id);
+    const prev = sorted[idx + 1] || null;
+    const next = sorted[idx - 1] || null;
+
+    const pageUrl = encodeURIComponent(window.location.href.split('#')[0] + '#post');
+    const title = encodeURIComponent(post.title);
+
+    wrap.innerHTML = `
+      <div class="post-back"><button class="btn btn-outline btn-sm" onclick="navigate('blog')"><i class="fas fa-arrow-left"></i> Back to Blog</button></div>
+      ${post.imageUrl ? `<div class="post-hero-img" style="background-image:url('${escapeHtml(post.imageUrl)}')"><div class="post-hero-overlay"></div></div>` : ''}
+      <div class="post-container">
+        <div class="post-meta-bar">
+          ${post.category ? `<span class="blog-cat-badge">${escapeHtml(post.category)}</span>` : ''}
+          <span class="post-date"><i class="fas fa-calendar-alt"></i> ${formatPostDate(post.publishDate)}</span>
+          <span class="post-author"><i class="fas fa-user"></i> Cherish Davis</span>
+        </div>
+        <h1 class="post-title">${escapeHtml(post.title)}</h1>
+        <div class="post-body">${post.body || ''}</div>
+
+        <div class="post-share">
+          <span>Share this article:</span>
+          <a href="https://www.facebook.com/sharer/sharer.php?u=${pageUrl}" target="_blank" rel="noopener" class="share-btn share-fb"><i class="fab fa-facebook-f"></i> Facebook</a>
+          <a href="https://twitter.com/intent/tweet?text=${title}&url=${pageUrl}" target="_blank" rel="noopener" class="share-btn share-tw"><i class="fab fa-x-twitter"></i> X</a>
+          <button class="share-btn share-copy" onclick="copyPostLink()"><i class="fas fa-link"></i> Copy Link</button>
+        </div>
+
+        <div class="post-nav">
+          <div class="post-nav-prev">
+            ${prev ? `<button class="btn btn-outline btn-sm" onclick="navigateToPost('${prev.id}')"><i class="fas fa-arrow-left"></i> ${escapeHtml(prev.title)}</button>` : ''}
+          </div>
+          <div class="post-nav-next">
+            ${next ? `<button class="btn btn-outline btn-sm" onclick="navigateToPost('${next.id}')">${escapeHtml(next.title)} <i class="fas fa-arrow-right"></i></button>` : ''}
+          </div>
+        </div>
+
+        <div class="post-author-card">
+          <div class="post-author-avatar"><i class="fas fa-user-circle"></i></div>
+          <div class="post-author-bio">
+            <h4>Cherish Davis</h4>
+            <p>Founder of Peachy Pals Playland and early childhood educator with 20+ years of experience. Every feature inside Peachy Pals is intentionally designed to support children's development.</p>
+            <button class="btn btn-outline btn-sm" onclick="navigate('about')"><i class="fas fa-heart"></i> Full Story</button>
+          </div>
+        </div>
+      </div>`;
+  } catch(e) {
+    wrap.innerHTML = '<p style="text-align:center;padding:4rem">Could not load article.</p>';
+  }
+}
+
+function copyPostLink() {
+  navigator.clipboard.writeText(window.location.href).then(() => showToast('Link copied!', 'success'));
+}
+
+function formatPostDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ==========================================
+// ADMIN BLOG
+// ==========================================
+async function loadAdminBlog() {
+  const list = document.getElementById('adminBlogList');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--gray);padding:1rem">Loading...</p>';
+  try {
+    const posts = await DataStore.getAllPosts(false);
+    if (!posts.length) { list.innerHTML = '<p style="color:var(--gray);padding:1rem">No posts yet. Click "New Post" to create one.</p>'; return; }
+    list.innerHTML = posts.map(p => `
+      <div class="admin-blog-item">
+        <div class="admin-blog-thumb" style="background-image:url('${escapeHtml(p.imageUrl || '')}')"></div>
+        <div class="admin-blog-info">
+          <div class="admin-blog-title">${escapeHtml(p.title)}</div>
+          <div class="admin-blog-meta">
+            <span class="blog-cat-badge blog-cat-badge-sm">${escapeHtml(p.category || 'Uncategorized')}</span>
+            <span style="color:var(--gray);font-size:0.8rem">${formatPostDate(p.publishDate)}</span>
+            <span class="post-status-badge ${p.published !== false ? 'published' : 'draft'}">${p.published !== false ? 'Published' : 'Draft'}</span>
+            ${p.featured ? '<span class="post-status-badge featured"><i class="fas fa-star"></i> Featured</span>' : ''}
+          </div>
+        </div>
+        <div class="admin-blog-actions">
+          <button class="btn btn-outline btn-sm" onclick="openPostEditor('${p.id}')"><i class="fas fa-edit"></i> Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAdminPost('${p.id}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--error)">Could not load posts.</p>';
+  }
+}
+
+async function openPostEditor(postId) {
+  let post = { title:'', category:'', excerpt:'', body:'', imageUrl:'', published:true, featured:false, publishDate: new Date().toISOString().slice(0,10) };
+  if (postId) {
+    try { post = { ...post, ...(await DataStore.getPost(postId)) }; } catch(e) {}
+  }
+  const catOptions = BLOG_CATEGORIES.map(c => `<option value="${c}" ${post.category === c ? 'selected' : ''}>${c}</option>`).join('');
+  openModal(`
+    <h2 style="margin-bottom:1.5rem"><i class="fas fa-book-open"></i> ${postId ? 'Edit' : 'New'} Post</h2>
+    <div class="form-group"><label>Title *</label><input type="text" id="pTitle" value="${escapeHtml(post.title)}" placeholder="Article title"></div>
+    <div class="form-row">
+      <div class="form-group"><label>Category</label><select id="pCat"><option value="">-- Select --</option>${catOptions}</select></div>
+      <div class="form-group"><label>Publish Date</label><input type="date" id="pDate" value="${post.publishDate ? post.publishDate.slice(0,10) : ''}"></div>
+    </div>
+    <div class="form-group"><label>Excerpt <small>(shown in blog grid)</small></label><textarea id="pExcerpt" rows="2" placeholder="One or two sentence summary...">${escapeHtml(post.excerpt || '')}</textarea></div>
+    <div class="form-group"><label>Featured Image URL</label><input type="url" id="pImg" value="${escapeHtml(post.imageUrl || '')}" placeholder="https://..."></div>
+    <div class="form-group"><label>Body <small>(HTML supported)</small></label><textarea id="pBody" rows="12" style="font-family:monospace;font-size:0.85rem">${escapeHtml(post.body || '')}</textarea></div>
+    <div class="form-row" style="gap:2rem;margin-top:0.5rem">
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" id="pPublished" ${post.published !== false ? 'checked' : ''}> Published</label>
+      <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" id="pFeatured" ${post.featured ? 'checked' : ''}> Featured (shows prominently)</label>
+    </div>
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveAdminPost('${postId || ''}')"><i class="fas fa-save"></i> Save Post</button>
+      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+    </div>`);
+}
+
+async function saveAdminPost(postId) {
+  const title = document.getElementById('pTitle')?.value?.trim();
+  if (!title) { showToast('Title is required', 'error'); return; }
+  const data = {
+    title,
+    category: document.getElementById('pCat')?.value || '',
+    excerpt: document.getElementById('pExcerpt')?.value?.trim() || '',
+    body: document.getElementById('pBody')?.value || '',
+    imageUrl: document.getElementById('pImg')?.value?.trim() || '',
+    publishDate: document.getElementById('pDate')?.value ? new Date(document.getElementById('pDate').value).toISOString() : new Date().toISOString(),
+    published: document.getElementById('pPublished')?.checked !== false,
+    featured: document.getElementById('pFeatured')?.checked || false
+  };
+  try {
+    if (postId) { await DataStore.updatePost(postId, data); showToast('Post updated', 'success'); }
+    else { await DataStore.createPost(data); showToast('Post created', 'success'); }
+    closeModal();
+    loadAdminBlog();
+    allBlogPosts = [];
+  } catch(e) { showToast('Could not save post', 'error'); }
+}
+
+async function deleteAdminPost(id) {
+  if (!confirm('Delete this post? This cannot be undone.')) return;
+  try {
+    await DataStore.deletePost(id);
+    showToast('Post deleted', 'info');
+    loadAdminBlog();
+    allBlogPosts = [];
+  } catch(e) { showToast('Could not delete post', 'error'); }
+}
+
+// ==========================================
 // INITIALIZATION
 // ==========================================
 async function init() {
@@ -2466,6 +2710,7 @@ async function init() {
   try { await DataStore.seedDefaults(); } catch(e) { console.warn('seedDefaults:', e); }
   try { await DataStore.migratePackages(); } catch(e) { console.warn('migratePackages:', e); }
   try { await DataStore.seedServices(); } catch(e) { console.warn('seedServices:', e); }
+  try { await DataStore.seedPosts(); } catch(e) { console.warn('seedPosts:', e); }
   try { await renderServices(); } catch(e) { console.warn('renderServices:', e); }
   try { await renderHomePackages(); } catch(e) { console.warn('renderHomePackages:', e); }
 
