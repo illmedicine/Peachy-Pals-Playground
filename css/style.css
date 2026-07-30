@@ -2010,6 +2010,21 @@ input:disabled {
 .post-status-badge.draft { background: #fff3cd; color: #856404; }
 .post-status-badge.featured { background: #fff3cd; color: #856404; }
 
+.post-img-upload-preview {
+  width: 100%;
+  height: 160px;
+  border-radius: 10px;
+  background: var(--cream);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray);
+  font-size: 0.9rem;
+  border: 2px dashed var(--gray-light);
+}
+
 @media (max-width: 600px) {
   .admin-blog-item { flex-wrap: wrap; }
   .admin-blog-actions { width: 100%; justify-content: flex-end; }

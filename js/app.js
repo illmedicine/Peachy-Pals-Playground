@@ -2658,7 +2658,16 @@ async function openPostEditor(postId) {
       <div class="form-group"><label>Publish Date</label><input type="date" id="pDate" value="${post.publishDate ? post.publishDate.slice(0,10) : ''}"></div>
     </div>
     <div class="form-group"><label>Excerpt <small>(shown in blog grid)</small></label><textarea id="pExcerpt" rows="2" placeholder="One or two sentence summary...">${escapeHtml(post.excerpt || '')}</textarea></div>
-    <div class="form-group"><label>Featured Image URL</label><input type="url" id="pImg" value="${escapeHtml(post.imageUrl || '')}" placeholder="https://..."></div>
+    <div class="form-group">
+      <label>Featured Image</label>
+      <div id="pImgPreview" class="post-img-upload-preview" ${post.imageUrl ? `style="background-image:url('${escapeHtml(post.imageUrl)}')"` : ''}>${post.imageUrl ? '' : '<span>No image selected</span>'}</div>
+      <input type="file" id="pImgFile" accept="image/*" onchange="previewPostImage(this)" style="margin-top:0.5rem">
+      <input type="hidden" id="pImg" value="${escapeHtml(post.imageUrl || '')}">
+      <div id="pImgProgress" style="display:none;margin-top:0.5rem">
+        <div style="font-size:0.85rem;color:var(--gray)" id="pImgText">Uploading...</div>
+        <div style="height:6px;background:var(--cream);border-radius:3px;margin-top:0.35rem"><div id="pImgBar" style="height:100%;background:var(--peach);border-radius:3px;width:0%;transition:width 0.3s"></div></div>
+      </div>
+    </div>
     <div class="form-group"><label>Body <small>(HTML supported)</small></label><textarea id="pBody" rows="12" style="font-family:monospace;font-size:0.85rem">${escapeHtml(post.body || '')}</textarea></div>
     <div class="form-row" style="gap:2rem;margin-top:0.5rem">
       <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer"><input type="checkbox" id="pPublished" ${post.published !== false ? 'checked' : ''}> Published</label>
@@ -2670,15 +2679,48 @@ async function openPostEditor(postId) {
     </div>`);
 }
 
+function previewPostImage(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('pImgPreview');
+    if (preview) {
+      preview.style.backgroundImage = `url('${e.target.result}')`;
+      preview.innerHTML = '';
+    }
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
 async function saveAdminPost(postId) {
   const title = document.getElementById('pTitle')?.value?.trim();
   if (!title) { showToast('Title is required', 'error'); return; }
+
+  let imageUrl = document.getElementById('pImg')?.value || '';
+  const fileInput = document.getElementById('pImgFile');
+  if (fileInput?.files && fileInput.files[0]) {
+    const progressEl = document.getElementById('pImgProgress');
+    try {
+      if (progressEl) progressEl.style.display = 'block';
+      imageUrl = await DataStore.processAndUploadImage(fileInput.files[0], (msg, pct) => {
+        const t = document.getElementById('pImgText');
+        const b = document.getElementById('pImgBar');
+        if (t) t.textContent = msg;
+        if (b) b.style.width = pct + '%';
+      });
+    } catch(err) {
+      showToast(err.message || 'Image upload failed. Try a smaller JPG or PNG.', 'error');
+      if (progressEl) progressEl.style.display = 'none';
+      return;
+    }
+  }
+
   const data = {
     title,
     category: document.getElementById('pCat')?.value || '',
     excerpt: document.getElementById('pExcerpt')?.value?.trim() || '',
     body: document.getElementById('pBody')?.value || '',
-    imageUrl: document.getElementById('pImg')?.value?.trim() || '',
+    imageUrl,
     publishDate: document.getElementById('pDate')?.value ? new Date(document.getElementById('pDate').value).toISOString() : new Date().toISOString(),
     published: document.getElementById('pPublished')?.checked !== false,
     featured: document.getElementById('pFeatured')?.checked || false
