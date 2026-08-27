@@ -2393,7 +2393,46 @@ async function processSquarePayment(containerId, amount, confirmCode, bookingId)
   }
 }
 
+function buildBookingEmailBody(booking, confirmCode, total, deposit) {
+  const addOns = booking.addOns || [];
+  const extraKids = Math.max(0, (booking.numberOfKids || 0) - (booking.maxGuests || 0));
+  const extraFee = extraKids * (booking.extraGuestFee || 0);
+  const basePrice = total - (booking.addOnsTotal || 0) - extraFee;
+
+  const itemLines = [`  • ${booking.packageName}: $${basePrice.toFixed(2)}`];
+  if (extraKids > 0) itemLines.push(`  • Extra guests (${extraKids}): +$${extraFee.toFixed(2)}`);
+  addOns.forEach(a => {
+    const qty = a.quantity > 1 ? ` x${a.quantity}` : '';
+    itemLines.push(`  • ${a.name}${qty}: +$${(a.price || 0).toFixed(2)}`);
+  });
+  const divider = '─'.repeat(36);
+
+  return `🍑 NEW BOOKING — ${confirmCode}
+${divider}
+GUEST DETAILS
+  Name:    ${booking.firstName} ${booking.lastName}
+  Phone:   ${booking.phone}
+  Email:   ${booking.email || 'Not provided'}
+
+EVENT DETAILS
+  Date:    ${formatDateDisplay(booking.date)}
+  Time:    ${booking.timeSlot}
+  Child:   ${booking.childName} (Age: ${booking.childAge})
+  Kids:    ${booking.numberOfKids}   Adults: ${booking.numberOfAdults}
+
+ORDER SUMMARY
+${itemLines.join('\n')}
+${divider}
+  TOTAL:   $${total.toFixed(2)}
+  DEPOSIT: $${typeof deposit === 'number' ? deposit.toFixed(2) : deposit}
+  Payment: ${booking.paymentMethod || 'N/A'}
+${divider}
+${booking.specialRequests ? `SPECIAL REQUESTS\n  ${booking.specialRequests}` : 'No special requests.'}`;
+}
+
 async function sendBookingEmail(booking, confirmCode, total, deposit) {
+  const body = buildBookingEmailBody(booking, confirmCode, total, deposit);
+
   // EmailJS integration
   if (CONFIG.emailjsServiceId && CONFIG.emailjsTemplateId && CONFIG.emailjsPublicKey) {
     try {
@@ -2414,23 +2453,25 @@ async function sendBookingEmail(booking, confirmCode, total, deposit) {
         total: '$' + total.toFixed(2),
         deposit: '$' + deposit,
         payment_method: booking.paymentMethod,
-        special_requests: booking.specialRequests || 'None'
+        special_requests: booking.specialRequests || 'None',
+        message: body
       }, CONFIG.emailjsPublicKey);
       console.log('✅ Booking email sent');
     } catch (e) { console.warn('Email send failed:', e); }
     return;
   }
-  // Fallback: Web3Forms (free, no signup — just get access key at web3forms.com)
+
+  // Web3Forms
   try {
     await fetch('https://api.web3forms.com/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         access_key: CONFIG.web3formsKey || '',
-        subject: 'New Booking: ' + confirmCode + ' — ' + booking.packageName,
+        subject: `🍑 New Booking: ${confirmCode} — ${booking.packageName} on ${formatDateDisplay(booking.date)}`,
         from_name: 'Peachy Pals Playland',
         to: CONFIG.businessEmail,
-        message: `New Booking Received!\n\nConfirmation: ${confirmCode}\nPackage: ${booking.packageName}\nDate: ${formatDateDisplay(booking.date)}\nTime: ${booking.timeSlot}\nGuest: ${booking.firstName} ${booking.lastName}\nPhone: ${booking.phone}\nEmail: ${booking.email || 'N/A'}\nChild: ${booking.childName} (Age ${booking.childAge})\nKids: ${booking.numberOfKids} | Adults: ${booking.numberOfAdults}\nTotal: $${total.toFixed(2)} | Deposit: $${deposit}\nPayment: ${booking.paymentMethod}\nRequests: ${booking.specialRequests || 'None'}`
+        message: body
       })
     });
     console.log('✅ Booking email sent via Web3Forms');
