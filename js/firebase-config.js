@@ -697,6 +697,40 @@ const DataStore = {
     console.log('✅ Blog posts seeded');
   },
 
+  // --- SEED PRIVATE PACKAGE (runs independently so it works even after initial seed) ---
+  async seedPrivatePackage() {
+    const existing = await this.getPackages();
+    if (existing.some(p => p.name === 'Private Peachy Experience')) return;
+    await this.savePackage({
+      name: 'Private Peachy Experience',
+      subtitle: 'Exclusive Facility Rental',
+      description: 'The whole playland. Your guests. Your celebration. Want Peachy Pals all to yourself? The Private Peachy Experience gives you everything included in our Feeling Peachy Deluxe Party, plus exclusive access to the entire playland for your celebration.',
+      price: 749,
+      weekendPrice: 749,
+      maxGuests: 24,
+      extraGuestFee: 15,
+      duration: '4 hours',
+      includes: [
+        'Everything included in the Feeling Peachy Deluxe Party',
+        '4 hours of exclusive access to Peachy Pals Playland',
+        'Up to 24 children',
+        'Exclusive use of all play areas',
+        'Private party room',
+        'No open-play guests during your event',
+        'No other parties scheduled during your private rental',
+        'Setup 30 minutes before your party',
+        'Cleanup handled by our Peachy Pals team',
+        '$15 per additional child (subject to facility capacity)'
+      ],
+      imageUrl: 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&h=400&fit=crop&auto=format',
+      availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      active: true,
+      blocksEntireDay: true,
+      sortOrder: 10
+    });
+    console.log('✅ Private Peachy Experience package seeded');
+  },
+
   // --- SEED DEFAULT PACKAGES ---
   async seedDefaults() {
     const existing = await this.getPackages();

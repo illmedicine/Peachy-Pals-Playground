@@ -8,6 +8,7 @@
 const CONFIG = {
   adminCode: '4931',
   depositPercent: 50,
+  taxRate: 0.07,        // Georgia state (4%) + Bartow County local (3%)
   partyDuration: 2,
   maxCapacity: 24,
   hours: {
@@ -251,6 +252,7 @@ function renderPackageCard(pkg, selectable = false) {
         <h3>${escapeHtml(pkg.name)}</h3>
         ${pkg.subtitle ? `<div class="pkg-card-subtitle">${escapeHtml(pkg.subtitle)}</div>` : ''}
         <p>${escapeHtml(pkg.description || '')}</p>
+        ${pkg.blocksEntireDay ? '<div style="display:inline-block;background:#7c3aed;color:#fff;font-size:0.75rem;font-weight:700;padding:0.2rem 0.7rem;border-radius:20px;margin-bottom:0.5rem">🔒 Exclusive Full-Facility Rental</div>' : ''}
         <div class="pkg-card-price">${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? 'From $' + pkg.price : '$' + pkg.price}<small> ${pkg.maxGuests ? '/ up to ' + pkg.maxGuests + ' guests' : ''}</small></div>
         ${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? `<div class="pkg-card-rates"><span>Tue–Thu: $${pkg.price}</span> <span>Wknd/Mon: $${pkg.weekendPrice}</span></div>` : ''}
         ${includesHtml ? `<ul class="pkg-card-includes">${includesHtml}</ul>` : ''}
@@ -460,7 +462,9 @@ function renderPaymentSummary() {
   const extraFee = extraKids * (pkg.extraGuestFee || 0);
   const selectedAddOns = getSelectedAddOns();
   const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
-  const total = basePrice + extraFee + addOnsTotal;
+  const subtotal = basePrice + extraFee + addOnsTotal;
+  const tax = Math.round(subtotal * CONFIG.taxRate * 100) / 100;
+  const total = subtotal + tax;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
 
   const addOnsHtml = selectedAddOns.map(a =>
@@ -479,6 +483,9 @@ function renderPaymentSummary() {
       ${extraKids > 0 ? `<tr><td><strong>Extra kids (${extraKids}):</strong></td><td>+$${extraFee}</td></tr>` : ''}
       ${addOnsHtml ? `<tr><td><strong>Add-ons:</strong></td><td></td></tr>${addOnsHtml}` : ''}
       <tr><td colspan="2"><hr style="margin:0.5rem 0"></td></tr>
+      <tr><td style="color:var(--gray)">Subtotal:</td><td>$${subtotal.toFixed(2)}</td></tr>
+      <tr><td style="color:var(--gray)">Georgia Sales Tax (7%):</td><td>$${tax.toFixed(2)}</td></tr>
+      <tr><td colspan="2"><hr style="margin:0.5rem 0"></td></tr>
       <tr><td><strong>Total:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${total.toFixed(2)}</td></tr>
       <tr><td><strong>Deposit (${CONFIG.depositPercent}%):</strong></td><td style="font-size:1.2rem;font-weight:900;color:var(--teal-dark)">$${deposit}</td></tr>
     </table>
@@ -495,7 +502,9 @@ async function submitBooking() {
   const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
   const selectedAddOns = getSelectedAddOns();
   const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
-  const total = basePrice + extraKids * (pkg.extraGuestFee || 0) + addOnsTotal;
+  const subtotal = basePrice + extraKids * (pkg.extraGuestFee || 0) + addOnsTotal;
+  const taxAmount = Math.round(subtotal * CONFIG.taxRate * 100) / 100;
+  const total = subtotal + taxAmount;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
   const pkgDuration = getPackageDuration(pkg);
 
@@ -517,12 +526,14 @@ async function submitBooking() {
     specialRequests: document.getElementById('bkRequests').value.trim(),
     addOns: selectedAddOns,
     addOnsTotal: addOnsTotal,
+    subtotal: subtotal,
+    taxAmount: taxAmount,
     status: 'pending',
     depositPaid: false,
     depositAmount: deposit,
     totalPrice: total,
     paymentMethod: 'square',
-    depositPaid: false
+    isPrivateBooking: !!pkg.blocksEntireDay
   };
 
   // Try Square payment if card was filled in
@@ -594,6 +605,13 @@ async function submitBooking() {
 
     // Render PayPal button if configured
     renderSquarePayButton('squarePayConfirm', deposit, result.confirmationCode, result.id || booking.id);
+
+    // Auto-block the entire day for private party packages
+    if (pkg.blocksEntireDay) {
+      try {
+        await DataStore.setBlockedDate(selectedDate, true, [], `Private party: ${result.confirmationCode}`);
+      } catch(e) { console.warn('Could not auto-block date:', e); }
+    }
 
     // Send email notification
     sendBookingEmail(booking, result.confirmationCode, total, deposit);
@@ -1112,6 +1130,7 @@ async function loadAdminPackages() {
         <h3>${escapeHtml(pkg.name)}</h3>
         <div class="price">$${pkg.price}${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? ' / $' + pkg.weekendPrice + ' wknd' : ''}</div>
         <p style="font-size:0.85rem;color:var(--gray);margin-top:0.25rem">${escapeHtml(pkg.subtitle || '')} · Max ${pkg.maxGuests || '?'} guests</p>
+        ${pkg.blocksEntireDay ? '<p style="font-size:0.8rem;color:#7c3aed;font-weight:700;margin-top:0.2rem">🔒 Private — Blocks Entire Day</p>' : ''}
         <p style="font-size:0.85rem;color:${pkg.active !== false ? 'var(--bamboo)' : '#e53935'};font-weight:700;margin-top:0.25rem">${pkg.active !== false ? '● Active' : '● Inactive'}</p>
         <div class="admin-pkg-actions">
           <button class="btn btn-outline btn-sm" onclick="openPackageEditor('${pkg.id}')"><i class="fas fa-edit"></i> Edit</button>
@@ -1167,6 +1186,10 @@ function openPackageEditor(pkgId) {
       <div class="form-group"><label>Sort Order</label><input type="number" id="pkgSort" value="${pkg?.sortOrder || 0}"></div>
       <div class="form-group">
         <label><input type="checkbox" id="pkgActive" ${pkg?.active !== false ? 'checked' : ''}> Active (visible to customers)</label>
+      </div>
+      <div class="form-group">
+        <label><input type="checkbox" id="pkgBlocksDay" ${pkg?.blocksEntireDay ? 'checked' : ''}> 🔒 Private Party — blocks entire facility for the day</label>
+        <p style="font-size:0.8rem;color:var(--gray);margin-top:0.25rem">When booked, the calendar will be fully blocked — no walk-ins or other parties that day.</p>
       </div>
       <div style="display:flex;gap:1rem;margin-top:1rem">
         <button class="btn btn-primary" onclick="savePackageAdmin('${pkgId || ''}')"><i class="fas fa-save"></i> Save Package</button>
@@ -1263,7 +1286,8 @@ async function savePackageAdmin(pkgId) {
     addOns: getAddonRows(),
     availableDays: document.getElementById('pkgDays').value.split(',').map(s => s.trim()).filter(Boolean),
     sortOrder: parseInt(document.getElementById('pkgSort').value) || 0,
-    active: document.getElementById('pkgActive').checked
+    active: document.getElementById('pkgActive').checked,
+    blocksEntireDay: document.getElementById('pkgBlocksDay')?.checked || false
   };
 
   if (pkgId) pkg.id = pkgId;
@@ -2397,7 +2421,9 @@ function buildBookingEmailBody(booking, confirmCode, total, deposit) {
   const addOns = booking.addOns || [];
   const extraKids = Math.max(0, (booking.numberOfKids || 0) - (booking.maxGuests || 0));
   const extraFee = extraKids * (booking.extraGuestFee || 0);
-  const basePrice = total - (booking.addOnsTotal || 0) - extraFee;
+  const subtotal = booking.subtotal || (total - (booking.taxAmount || 0));
+  const taxAmount = booking.taxAmount || Math.round(subtotal * CONFIG.taxRate * 100) / 100;
+  const basePrice = subtotal - (booking.addOnsTotal || 0) - extraFee;
 
   const itemLines = [`  • ${booking.packageName}: $${basePrice.toFixed(2)}`];
   if (extraKids > 0) itemLines.push(`  • Extra guests (${extraKids}): +$${extraFee.toFixed(2)}`);
@@ -2406,8 +2432,9 @@ function buildBookingEmailBody(booking, confirmCode, total, deposit) {
     itemLines.push(`  • ${a.name}${qty}: +$${(a.price || 0).toFixed(2)}`);
   });
   const divider = '─'.repeat(36);
+  const privateNote = booking.isPrivateBooking ? '\n  ⭐ PRIVATE PARTY — Entire facility reserved' : '';
 
-  return `🍑 NEW BOOKING — ${confirmCode}
+  return `🍑 NEW BOOKING — ${confirmCode}${privateNote ? '\n' + privateNote : ''}
 ${divider}
 GUEST DETAILS
   Name:    ${booking.firstName} ${booking.lastName}
@@ -2418,10 +2445,12 @@ EVENT DETAILS
   Date:    ${formatDateDisplay(booking.date)}
   Time:    ${booking.timeSlot}
   Child:   ${booking.childName} (Age: ${booking.childAge})
-  Kids:    ${booking.numberOfKids}   Adults: ${booking.numberOfAdults}
+  Kids:    ${booking.numberOfKids}   Adults: ${booking.numberOfAdults}${privateNote}
 
 ORDER SUMMARY
 ${itemLines.join('\n')}
+  ─ Subtotal: $${subtotal.toFixed(2)}
+  ─ Georgia Sales Tax (7%): $${taxAmount.toFixed(2)}
 ${divider}
   TOTAL:   $${total.toFixed(2)}
   DEPOSIT: $${typeof deposit === 'number' ? deposit.toFixed(2) : deposit}
@@ -2791,6 +2820,7 @@ async function deleteAdminPost(id) {
 async function init() {
   // Seed and load data — each step wrapped so one failure doesn't block the rest
   try { await DataStore.seedDefaults(); } catch(e) { console.warn('seedDefaults:', e); }
+  try { await DataStore.seedPrivatePackage(); } catch(e) { console.warn('seedPrivatePackage:', e); }
   try { await DataStore.migratePackages(); } catch(e) { console.warn('migratePackages:', e); }
   try { await DataStore.seedServices(); } catch(e) { console.warn('seedServices:', e); }
   try { await DataStore.seedPosts(); } catch(e) { console.warn('seedPosts:', e); }
