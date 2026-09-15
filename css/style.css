@@ -2029,3 +2029,141 @@ input:disabled {
   .admin-blog-item { flex-wrap: wrap; }
   .admin-blog-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* ==========================================
+   EVENTS CALENDAR (PUBLIC)
+   ========================================== */
+.events-page-header {
+  background: linear-gradient(135deg, #7c3aed 0%, var(--peach) 100%);
+  color: #fff; text-align: center; padding: 3.5rem 1.5rem 2.5rem;
+}
+.events-page-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.events-page-header p  { font-size: 1.05rem; opacity: 0.9; }
+
+.events-calendar-nav {
+  display: flex; align-items: center; justify-content: center;
+  gap: 1.5rem; margin-bottom: 1rem;
+}
+.events-legend {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem;
+  font-size: 0.82rem; color: var(--gray); margin-bottom: 1rem;
+  justify-content: center;
+}
+.el-dot {
+  display: inline-block; width: 11px; height: 11px;
+  border-radius: 50%; margin-right: 0.3rem; vertical-align: middle;
+}
+.el-dot.open    { background: var(--bamboo); }
+.el-dot.partial { background: #f59e0b; }
+.el-dot.full    { background: #ef4444; }
+.el-dot.event   { background: #7c3aed; }
+
+.events-calendar-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 4px; max-width: 700px; margin: 0 auto;
+}
+.ec-day-header {
+  text-align: center; font-size: 0.75rem; font-weight: 700;
+  color: var(--gray); padding: 0.3rem 0;
+}
+.ec-day {
+  border-radius: 8px; min-height: 64px; padding: 0.35rem;
+  cursor: default; transition: transform 0.15s;
+  background: var(--cream); display: flex; flex-direction: column;
+}
+.ec-day.empty { background: transparent; }
+.ec-day.ec-open    { background: #d1fae5; cursor: pointer; }
+.ec-day.ec-partial { background: #fef3c7; cursor: pointer; }
+.ec-day.ec-full    { background: #fee2e2; cursor: pointer; }
+.ec-day.ec-event   { background: #ede9fe; cursor: pointer; }
+.ec-day.ec-past    { opacity: 0.4; }
+.ec-day:not(.empty):not(.ec-past):hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(0,0,0,0.12); z-index: 1; }
+.ec-day-num { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.ec-day-dots { display: flex; gap: 3px; margin-top: auto; flex-wrap: wrap; }
+.ec-dot-mini {
+  font-size: 0.65rem; font-weight: 700; border-radius: 10px;
+  padding: 0 5px; line-height: 1.6;
+}
+.ec-dot-mini.booking { background: var(--teal); color: #fff; }
+.ec-dot-mini.event   { background: #7c3aed; color: #fff; }
+
+/* Day popup */
+.events-day-popup {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 8000; display: flex; align-items: center; justify-content: center;
+  padding: 1rem;
+}
+.events-day-popup-inner {
+  background: var(--white); border-radius: 16px; padding: 1.5rem;
+  max-width: 420px; width: 100%; max-height: 80vh; overflow-y: auto;
+  position: relative;
+}
+.events-popup-close {
+  position: absolute; top: 1rem; right: 1rem;
+  background: none; border: none; font-size: 1.1rem;
+  color: var(--gray); cursor: pointer;
+}
+.ec-popup-event {
+  background: #ede9fe; border-radius: 10px; padding: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+.ec-popup-booking {
+  background: var(--cream); border-radius: 10px; padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem; font-size: 0.9rem; display: flex; flex-direction: column; gap: 0.2rem;
+}
+
+/* ==========================================
+   ADMIN: EVENTS
+   ========================================== */
+.admin-events-list { display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem; }
+.admin-event-card {
+  display: flex; gap: 1rem; background: var(--white);
+  border: 1.5px solid var(--gray-light); border-radius: 12px; overflow: hidden;
+}
+.admin-event-img {
+  width: 120px; min-width: 120px; background-size: cover;
+  background-position: center; background-color: var(--cream);
+}
+.admin-event-img.no-img {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; color: var(--gray);
+}
+.admin-event-body { padding: 0.85rem; flex: 1; }
+
+/* ==========================================
+   ADMIN: MEMBERS
+   ========================================== */
+.admin-members-list { display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem; }
+.admin-member-card {
+  background: var(--white); border: 1.5px solid var(--gray-light);
+  border-radius: 12px; padding: 1rem 1.25rem;
+}
+.admin-member-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+.admin-member-header h3 { margin: 0 0 0.2rem; }
+
+/* ==========================================
+   LIVE ACTIVITY POPUP
+   ========================================== */
+.activity-popup {
+  display: flex; align-items: center; gap: 0.75rem;
+  background: var(--white); border-radius: 14px;
+  padding: 0.75rem 1rem; box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  max-width: 300px; border-left: 4px solid var(--peach);
+  opacity: 0; transform: translateY(20px) scale(0.95);
+  transition: opacity 0.35s, transform 0.35s;
+}
+.activity-popup.ap-show { opacity: 1; transform: translateY(0) scale(1); }
+.ap-icon { font-size: 1.8rem; line-height: 1; flex-shrink: 0; }
+.ap-headline { font-weight: 700; font-size: 0.9rem; color: var(--text); }
+.ap-sub { font-size: 0.8rem; color: var(--gray); margin-top: 0.1rem; }
+
+@media (max-width: 600px) {
+  .events-calendar-grid { gap: 2px; }
+  .ec-day { min-height: 48px; padding: 0.2rem; }
+  .admin-event-card { flex-direction: column; }
+  .admin-event-img { width: 100%; height: 120px; min-width: unset; }
+  .admin-member-header { flex-direction: column; gap: 0.5rem; }
+}

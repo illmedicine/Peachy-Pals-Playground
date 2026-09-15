@@ -56,6 +56,7 @@
         <a href="#home" onclick="scrollToId('services')">Services</a>
         <a href="#home" onclick="scrollToId('contact')">Contact</a>
         <a href="#home" onclick="scrollToId('reviews')">Reviews</a>
+        <a href="#events" data-view="events" onclick="navigate('events')">Events</a>
         <a href="#blog" data-view="blog" onclick="navigate('blog')">Blog</a>
         <a href="#about" data-view="about" onclick="navigate('about')">About</a>
       </div>
@@ -396,6 +397,36 @@
   </div>
 
   <!-- ====================================================== -->
+  <!-- ==================== EVENTS VIEW ==================== -->
+  <!-- ===================================================== -->
+  <div class="view" id="view-events">
+    <section class="page-header events-page-header">
+      <h1>Events &amp; <span class="txt-gradient">Availability</span></h1>
+      <p>See what's happening at Peachy Pals — open party slots, special events, and more.</p>
+    </section>
+    <section class="container" style="padding:2rem 1rem 4rem">
+      <div class="events-calendar-nav">
+        <button class="btn btn-outline btn-sm" onclick="eventsCalNav(-1)"><i class="fas fa-chevron-left"></i></button>
+        <span id="eventsMonthLabel" style="font-weight:700;font-size:1.1rem"></span>
+        <button class="btn btn-outline btn-sm" onclick="eventsCalNav(1)"><i class="fas fa-chevron-right"></i></button>
+      </div>
+      <div class="events-legend">
+        <span class="el-dot open"></span>Available
+        <span class="el-dot partial"></span>Partially Booked
+        <span class="el-dot full"></span>Fully Booked
+        <span class="el-dot event"></span>Special Event
+      </div>
+      <div id="eventsCalendarGrid" class="events-calendar-grid"></div>
+      <!-- Day detail popup -->
+      <div id="eventsDayPopup" class="events-day-popup" style="display:none">
+        <div class="events-day-popup-inner">
+          <button class="events-popup-close" onclick="closeEventsDayPopup()"><i class="fas fa-times"></i></button>
+          <div id="eventsDayPopupContent"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <!-- ==================== ABOUT VIEW ====================== -->
   <!-- ====================================================== -->
   <div class="view" id="view-about">
@@ -780,6 +811,8 @@
           <button class="admin-tab" data-tab="adminServices" onclick="adminSwitchTab('adminServices')"><i class="fas fa-images"></i> Services</button>
           <button class="admin-tab" data-tab="adminWaivers" onclick="adminSwitchTab('adminWaivers')"><i class="fas fa-file-signature"></i> Waivers</button>
           <button class="admin-tab" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
+          <button class="admin-tab" data-tab="adminEvents" onclick="adminSwitchTab('adminEvents')"><i class="fas fa-star"></i> Events</button>
+          <button class="admin-tab" data-tab="adminMembers" onclick="adminSwitchTab('adminMembers')"><i class="fas fa-id-card"></i> Members</button>
           <button class="admin-tab" data-tab="adminBlog" onclick="adminSwitchTab('adminBlog')"><i class="fas fa-book-open"></i> Blog</button>
         </div>
 
@@ -838,6 +871,26 @@
           <div id="adminWaiversList" class="admin-waivers-list" style="margin-top:1rem">
             <!-- All waivers list -->
           </div>
+        </div>
+
+        <!-- Admin: Events -->
+        <div class="admin-panel" id="adminEvents">
+          <div class="admin-panel-header">
+            <h2>Special Events</h2>
+            <button class="btn btn-primary" onclick="openEventEditor()"><i class="fas fa-plus"></i> New Event</button>
+          </div>
+          <div id="adminEventsList" class="admin-events-list"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: Members -->
+        <div class="admin-panel" id="adminMembers">
+          <div class="admin-panel-header">
+            <h2>Member Signups</h2>
+          </div>
+          <div style="margin-bottom:1rem">
+            <input type="text" id="memberSearch" placeholder="Search by name, phone, or email..." oninput="filterMembers()" style="width:100%;max-width:400px">
+          </div>
+          <div id="adminMembersList" class="admin-members-list"><!-- JS --></div>
         </div>
 
         <!-- Admin: Blog -->
@@ -1014,6 +1067,9 @@
   <!-- ====================================================== -->
   <!-- ================== MODAL OVERLAY ===================== -->
   <!-- ====================================================== -->
+  <!-- Live Activity Popup -->
+  <div id="activityPopupStack" style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:9999;display:flex;flex-direction:column-reverse;gap:0.6rem;pointer-events:none"></div>
+
   <div class="modal-overlay" id="modalOverlay" onclick="closeModal()">
     <div class="modal" id="modal" onclick="event.stopPropagation()">
       <button class="modal-close" onclick="closeModal()">&times;</button>

@@ -63,7 +63,7 @@ function navigate(view) {
 
 function handleRoute() {
   const hash = window.location.hash.slice(1) || 'home';
-  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin', 'blog', 'post', 'about'];
+  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin', 'blog', 'post', 'about', 'events'];
   const view = validViews.includes(hash) ? hash : 'home';
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -85,6 +85,7 @@ function handleRoute() {
   if (view === 'waiver') initWaiverView();
   if (view === 'blog') initBlogView();
   if (view === 'post') loadCurrentPost();
+  if (view === 'events') initEventsCalendar();
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
 }
 
@@ -1051,6 +1052,7 @@ function adminLogin() {
     loadAdminBookings();
     loadAdminPackages();
     loadAdminNotifications();
+    loadAdminEvents();
     showToast('Welcome, Admin!', 'success');
   } else {
     document.getElementById('adminError').style.display = 'block';
@@ -1074,6 +1076,8 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminWaivers') loadAdminWaivers();
   if (tabId === 'adminAvailability') initAdminCalendar();
   if (tabId === 'adminBlog') loadAdminBlog();
+  if (tabId === 'adminEvents') loadAdminEvents();
+  if (tabId === 'adminMembers') loadAdminMembers();
 }
 
 // Admin: Bookings
@@ -2866,10 +2870,361 @@ async function init() {
       });
     }
   });
+
+  // Start live activity popup listener
+  initActivityPopups();
 }
 
 // Start the app
 document.addEventListener('DOMContentLoaded', init);
+
+// ==========================================
+// EVENTS CALENDAR (PUBLIC)
+// ==========================================
+let eventsCalYear = new Date().getFullYear();
+let eventsCalMonth = new Date().getMonth();
+let allPublicEvents = [];
+let allPublicBookings = [];
+
+async function initEventsCalendar() {
+  eventsCalYear = new Date().getFullYear();
+  eventsCalMonth = new Date().getMonth();
+  try {
+    [allPublicBookings, allPublicEvents, blockedDates] = await Promise.all([
+      DataStore.getAllBookings(),
+      DataStore.getAllEvents(),
+      DataStore.getBlockedDates()
+    ]);
+  } catch(e) { console.warn('Events calendar load:', e); }
+  renderEventsCalendar();
+}
+
+function eventsCalNav(dir) {
+  const maxMonth = new Date().getMonth() + 2;
+  const maxYear = new Date().getFullYear() + (maxMonth > 11 ? 1 : 0);
+  eventsCalMonth += dir;
+  if (eventsCalMonth < 0) { eventsCalMonth = 11; eventsCalYear--; }
+  if (eventsCalMonth > 11) { eventsCalMonth = 0; eventsCalYear++; }
+  // Clamp to 3 months from now
+  const now = new Date(); now.setDate(1); now.setHours(0,0,0,0);
+  const cur = new Date(eventsCalYear, eventsCalMonth, 1);
+  const limit = new Date(now.getFullYear(), now.getMonth() + 3, 1);
+  if (cur < now) { eventsCalYear = now.getFullYear(); eventsCalMonth = now.getMonth(); }
+  if (cur >= limit) { eventsCalYear = limit.getFullYear(); eventsCalMonth = limit.getMonth() - 1; if (eventsCalMonth < 0) { eventsCalMonth = 11; eventsCalYear--; } }
+  renderEventsCalendar();
+}
+
+function renderEventsCalendar() {
+  const label = document.getElementById('eventsMonthLabel');
+  const grid = document.getElementById('eventsCalendarGrid');
+  if (!label || !grid) return;
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  label.textContent = monthNames[eventsCalMonth] + ' ' + eventsCalYear;
+
+  const firstDay = new Date(eventsCalYear, eventsCalMonth, 1).getDay();
+  const daysInMonth = new Date(eventsCalYear, eventsCalMonth + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dayHeaders = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  let html = dayHeaders.map(d => `<div class="ec-day-header">${d}</div>`).join('');
+  for (let i = 0; i < firstDay; i++) html += '<div class="ec-day empty"></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(eventsCalYear, eventsCalMonth, d);
+    const dateStr = formatDate(date);
+    const isPast = date < today;
+    const isBlocked = blockedDates.some(b => b.date === dateStr && b.blocked);
+    const dayBookings = allPublicBookings.filter(b => b.date === dateStr && b.status !== 'cancelled');
+    const dayEvents = allPublicEvents.filter(e => e.date === dateStr);
+    const hasEvents = dayEvents.length > 0;
+
+    let cls = 'ec-day';
+    if (isPast || isBlocked) cls += ' ec-past';
+    else if (hasEvents) cls += ' ec-event';
+    else if (dayBookings.length >= 3) cls += ' ec-full';
+    else if (dayBookings.length > 0) cls += ' ec-partial';
+    else cls += ' ec-open';
+
+    const dots = [
+      dayBookings.length > 0 ? `<span class="ec-dot-mini booking">${dayBookings.length}</span>` : '',
+      hasEvents ? `<span class="ec-dot-mini event">★</span>` : ''
+    ].join('');
+
+    const clickable = !isPast;
+    html += `<div class="${cls}"${clickable ? ` onclick="showEventsDayDetail('${dateStr}')"` : ''}>
+      <span class="ec-day-num">${d}</span>
+      <div class="ec-day-dots">${dots}</div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function showEventsDayDetail(dateStr) {
+  const dayBookings = allPublicBookings.filter(b => b.date === dateStr && b.status !== 'cancelled');
+  const dayEvents = allPublicEvents.filter(e => e.date === dateStr);
+  const popup = document.getElementById('eventsDayPopup');
+  const content = document.getElementById('eventsDayPopupContent');
+  if (!popup || !content) return;
+
+  let html = `<h3 style="margin-bottom:1rem">${formatDateDisplay(dateStr)}</h3>`;
+
+  if (dayEvents.length > 0) {
+    html += '<h4 style="color:var(--peach-dark);margin-bottom:0.5rem"><i class="fas fa-star"></i> Special Events</h4>';
+    dayEvents.forEach(e => {
+      html += `<div class="ec-popup-event">
+        ${e.imageUrl ? `<img src="${escapeHtml(e.imageUrl)}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:0.5rem">` : ''}
+        <div style="font-weight:700">${escapeHtml(e.title)}</div>
+        ${e.startTime ? `<div style="font-size:0.85rem;color:var(--gray)">${e.startTime}${e.endTime ? ' – ' + e.endTime : ''}</div>` : ''}
+        ${e.description ? `<div style="font-size:0.9rem;margin-top:0.3rem">${escapeHtml(e.description)}</div>` : ''}
+      </div>`;
+    });
+  }
+
+  if (dayBookings.length > 0) {
+    html += `<h4 style="color:var(--teal-dark);margin-bottom:0.5rem;margin-top:${dayEvents.length ? '1rem' : '0'}"><i class="fas fa-birthday-cake"></i> Party Bookings</h4>`;
+    dayBookings.forEach(b => {
+      html += `<div class="ec-popup-booking">
+        <div><i class="fas fa-clock" style="font-size:0.8rem;color:var(--gray)"></i> ${escapeHtml(b.timeSlot || 'TBD')}</div>
+        <div><i class="fas fa-child" style="font-size:0.8rem;color:var(--gray)"></i> Party of ${b.numberOfKids || '?'} kids</div>
+        ${b.isPrivateBooking ? '<div style="font-size:0.8rem;color:#7c3aed;font-weight:600">🔒 Private Exclusive Rental</div>' : ''}
+      </div>`;
+    });
+  }
+
+  if (dayBookings.length === 0 && dayEvents.length === 0) {
+    html += '<p style="color:var(--gray);text-align:center;padding:1rem">No bookings or events scheduled — <a href="#booking" onclick="navigate(\'booking\');closeEventsDayPopup()">book your party!</a></p>';
+  }
+
+  html += `<div style="margin-top:1.25rem;text-align:center">
+    <button class="btn btn-primary btn-sm" onclick="navigate('booking');closeEventsDayPopup()"><i class="fas fa-calendar-plus"></i> Book a Party</button>
+  </div>`;
+
+  content.innerHTML = html;
+  popup.style.display = 'flex';
+}
+
+function closeEventsDayPopup() {
+  const p = document.getElementById('eventsDayPopup');
+  if (p) p.style.display = 'none';
+}
+
+// ==========================================
+// ADMIN: EVENTS
+// ==========================================
+let adminEventsList = [];
+
+async function loadAdminEvents() {
+  adminEventsList = await DataStore.getAllEvents();
+  const list = document.getElementById('adminEventsList');
+  if (!list) return;
+  if (adminEventsList.length === 0) {
+    list.innerHTML = '<div class="no-bookings-msg">No events yet. Create one to show it on the public calendar.</div>';
+    return;
+  }
+  list.innerHTML = adminEventsList.map(e => `
+    <div class="admin-event-card">
+      ${e.imageUrl ? `<div class="admin-event-img" style="background-image:url('${escapeHtml(e.imageUrl)}')"></div>` : '<div class="admin-event-img no-img"><i class="fas fa-calendar-star"></i></div>'}
+      <div class="admin-event-body">
+        <h3>${escapeHtml(e.title)}</h3>
+        <p style="font-size:0.85rem;color:var(--gray)">${formatDateDisplay(e.date)}${e.startTime ? ' · ' + e.startTime : ''}${e.endTime ? ' – ' + e.endTime : ''}</p>
+        ${e.description ? `<p style="font-size:0.85rem;margin-top:0.3rem">${escapeHtml(e.description)}</p>` : ''}
+        <div class="admin-pkg-actions" style="margin-top:0.75rem">
+          <button class="btn btn-outline btn-sm" onclick="openEventEditor('${e.id}')"><i class="fas fa-edit"></i> Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAdminEvent('${e.id}')"><i class="fas fa-trash"></i> Delete</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function openEventEditor(eventId) {
+  const evt = eventId ? adminEventsList.find(e => e.id === eventId) : null;
+  const html = `
+    <h2>${evt ? 'Edit' : 'New'} Event</h2>
+    <form onsubmit="return false" style="margin-top:1rem">
+      <div class="form-group"><label>Event Title *</label><input type="text" id="evtTitle" value="${escapeHtml(evt?.title || '')}" placeholder="e.g. Family Fun Night"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Date *</label><input type="date" id="evtDate" value="${evt?.date || ''}"></div>
+        <div class="form-group"><label>Start Time</label><input type="time" id="evtStart" value="${evt?.startTime || ''}"></div>
+        <div class="form-group"><label>End Time</label><input type="time" id="evtEnd" value="${evt?.endTime || ''}"></div>
+      </div>
+      <div class="form-group"><label>Description</label><textarea id="evtDesc" rows="3" placeholder="Brief description visible on the public calendar...">${escapeHtml(evt?.description || '')}</textarea></div>
+      <div class="form-group">
+        <label>Event Photo</label>
+        <div id="evtImgPreview" class="post-img-upload-preview" ${evt?.imageUrl ? `style="background-image:url('${escapeHtml(evt.imageUrl)}')"` : ''}>${evt?.imageUrl ? '' : '<span>No image selected</span>'}</div>
+        <input type="file" id="evtImgFile" accept="image/*" onchange="previewEvtImage(this)" style="margin-top:0.5rem">
+        <input type="hidden" id="evtImg" value="${escapeHtml(evt?.imageUrl || '')}">
+        <div id="evtImgProgress" style="display:none;margin-top:0.5rem">
+          <div style="font-size:0.85rem;color:var(--gray)" id="evtImgText">Uploading...</div>
+          <div style="height:6px;background:var(--cream);border-radius:3px;margin-top:0.35rem"><div id="evtImgBar" style="height:100%;background:var(--peach);border-radius:3px;width:0%;transition:width 0.3s"></div></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:1rem;margin-top:1rem">
+        <button class="btn btn-primary" onclick="saveAdminEvent('${eventId || ''}')"><i class="fas fa-save"></i> Save Event</button>
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>`;
+  openModal(html);
+}
+
+function previewEvtImage(input) {
+  if (!input.files || !input.files[0]) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const p = document.getElementById('evtImgPreview');
+    if (p) { p.style.backgroundImage = `url('${e.target.result}')`; p.innerHTML = ''; }
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+async function saveAdminEvent(eventId) {
+  const title = document.getElementById('evtTitle')?.value?.trim();
+  const date = document.getElementById('evtDate')?.value;
+  if (!title || !date) { showToast('Title and date are required', 'error'); return; }
+
+  let imageUrl = document.getElementById('evtImg')?.value || '';
+  const fileInput = document.getElementById('evtImgFile');
+  if (fileInput?.files && fileInput.files[0]) {
+    const progressEl = document.getElementById('evtImgProgress');
+    try {
+      if (progressEl) progressEl.style.display = 'block';
+      imageUrl = await DataStore.processAndUploadImage(fileInput.files[0], (msg, pct) => {
+        const t = document.getElementById('evtImgText');
+        const b = document.getElementById('evtImgBar');
+        if (t) t.textContent = msg;
+        if (b) b.style.width = pct + '%';
+      });
+    } catch(err) {
+      showToast(err.message || 'Image upload failed', 'error');
+      if (progressEl) progressEl.style.display = 'none';
+      return;
+    }
+  }
+
+  const data = {
+    title,
+    date,
+    startTime: document.getElementById('evtStart')?.value || '',
+    endTime: document.getElementById('evtEnd')?.value || '',
+    description: document.getElementById('evtDesc')?.value?.trim() || '',
+    imageUrl
+  };
+
+  try {
+    if (eventId) {
+      await DataStore.updateEvent(eventId, data);
+    } else {
+      await DataStore.createEvent(data);
+    }
+    showToast('Event saved!', 'success');
+    closeModal();
+    loadAdminEvents();
+  } catch(err) {
+    showToast('Error saving event.', 'error');
+  }
+}
+
+async function deleteAdminEvent(id) {
+  if (!confirm('Delete this event?')) return;
+  await DataStore.deleteEvent(id);
+  showToast('Event deleted', 'info');
+  loadAdminEvents();
+}
+
+// ==========================================
+// ADMIN: MEMBERS
+// ==========================================
+let allMembersList = [];
+
+async function loadAdminMembers() {
+  allMembersList = await DataStore.getAllMemberships();
+  renderMembersList(allMembersList);
+}
+
+function filterMembers() {
+  const q = (document.getElementById('memberSearch')?.value || '').toLowerCase();
+  const filtered = q ? allMembersList.filter(m =>
+    (m.firstName + ' ' + m.lastName).toLowerCase().includes(q) ||
+    (m.phone || '').includes(q) ||
+    (m.email || '').toLowerCase().includes(q)
+  ) : allMembersList;
+  renderMembersList(filtered);
+}
+
+function renderMembersList(members) {
+  const list = document.getElementById('adminMembersList');
+  if (!list) return;
+  if (members.length === 0) {
+    list.innerHTML = '<div class="no-bookings-msg">No members found.</div>';
+    return;
+  }
+  list.innerHTML = members.map(m => {
+    const children = (m.children || []).map(c => escapeHtml(c.name) + (c.age ? ' (Age ' + c.age + ')' : '')).join(', ');
+    const joined = m.createdAt ? new Date(m.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : 'N/A';
+    const statusColor = m.status === 'active' ? 'var(--bamboo)' : m.status === 'cancelled' ? '#e53935' : 'var(--peach)';
+    return `
+      <div class="admin-member-card">
+        <div class="admin-member-header">
+          <div>
+            <h3>${escapeHtml(m.firstName || '')} ${escapeHtml(m.lastName || '')}</h3>
+            <span style="font-size:0.8rem;font-weight:700;color:${statusColor};text-transform:uppercase">${m.status || 'pending'}</span>
+          </div>
+          <div style="text-align:right;font-size:0.8rem;color:var(--gray)">
+            <div>${escapeHtml(m.planName || m.planType || '')}</div>
+            <div>Joined ${joined}</div>
+            <div style="font-weight:700;color:var(--peach-dark)">${m.membershipCode || ''}</div>
+          </div>
+        </div>
+        <dl class="booking-detail-grid" style="margin-top:0.5rem">
+          <dt>Phone:</dt><dd><a href="tel:${escapeHtml(m.phone || '')}" style="color:var(--peach-dark);font-weight:700">${escapeHtml(m.phone || 'N/A')}</a></dd>
+          <dt>Email:</dt><dd><a href="mailto:${escapeHtml(m.email || '')}" style="color:var(--teal-dark)">${escapeHtml(m.email || 'N/A')}</a></dd>
+          ${children ? `<dt>Children:</dt><dd>${children}</dd>` : ''}
+          ${m.numberOfSiblings ? `<dt>Siblings:</dt><dd>${m.numberOfSiblings}</dd>` : ''}
+          ${m.monthlyTotal ? `<dt>Monthly:</dt><dd>$${m.monthlyTotal}/mo</dd>` : ''}
+        </dl>
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-success btn-sm" onclick="setMemberStatus('${m.id}','active')">✓ Active</button>
+          <button class="btn btn-outline btn-sm" onclick="setMemberStatus('${m.id}','pending')">Pending</button>
+          <button class="btn btn-danger btn-sm" onclick="setMemberStatus('${m.id}','cancelled')">Cancel</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function setMemberStatus(id, status) {
+  await DataStore.updateMembership(id, { status });
+  showToast('Member status updated', 'success');
+  loadAdminMembers();
+}
+
+// ==========================================
+// LIVE ACTIVITY POPUPS
+// ==========================================
+function showActivityPopup(icon, headline, sub) {
+  const stack = document.getElementById('activityPopupStack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = 'activity-popup';
+  el.innerHTML = `<span class="ap-icon">${icon}</span><div><div class="ap-headline">${headline}</div><div class="ap-sub">${sub}</div></div>`;
+  el.style.pointerEvents = 'auto';
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('ap-show'));
+  setTimeout(() => {
+    el.classList.remove('ap-show');
+    setTimeout(() => el.remove(), 400);
+  }, 7000);
+}
+
+function initActivityPopups() {
+  DataStore.subscribeToNewActivity(
+    (booking) => {
+      showActivityPopup('🎉', 'New party just booked!', `${escapeHtml(booking.packageName || 'A party')} on ${formatDateDisplay(booking.date)}`);
+    },
+    (event) => {
+      showActivityPopup('📅', 'New event added!', escapeHtml(event.title || 'Check the Events calendar'));
+    }
+  );
+}
 
 // ==========================================
 // PWA — SERVICE WORKER & INSTALL PROMPT

@@ -252,6 +252,56 @@ const DataStore = {
     localStorage.setItem('pp_blocked', JSON.stringify(dates));
   },
 
+  // --- EVENTS ---
+  async createEvent(event) {
+    event.createdAt = new Date().toISOString();
+    if (isFirebaseConfigured) {
+      const ref = this._ref('events').push();
+      await ref.set(event);
+      return { id: ref.key, ...event };
+    }
+    const events = JSON.parse(localStorage.getItem('pp_events') || '[]');
+    event.id = 'evt_' + Date.now();
+    events.push(event);
+    localStorage.setItem('pp_events', JSON.stringify(events));
+    return event;
+  },
+
+  async getAllEvents() {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('events').orderByChild('date').once('value');
+      return this._snapToArray(snap);
+    }
+    return JSON.parse(localStorage.getItem('pp_events') || '[]');
+  },
+
+  async updateEvent(id, data) {
+    if (isFirebaseConfigured) { await this._ref('events/' + id).update(data); return; }
+    const events = JSON.parse(localStorage.getItem('pp_events') || '[]');
+    const idx = events.findIndex(e => e.id === id);
+    if (idx >= 0) Object.assign(events[idx], data);
+    localStorage.setItem('pp_events', JSON.stringify(events));
+  },
+
+  async deleteEvent(id) {
+    if (isFirebaseConfigured) { await this._ref('events/' + id).remove(); return; }
+    const events = JSON.parse(localStorage.getItem('pp_events') || '[]').filter(e => e.id !== id);
+    localStorage.setItem('pp_events', JSON.stringify(events));
+  },
+
+  subscribeToNewActivity(onBooking, onEvent) {
+    if (!isFirebaseConfigured) return;
+    const cutoff = Date.now() - 3000;
+    this._ref('bookings').orderByChild('createdAt').limitToLast(1).on('child_added', snap => {
+      const b = { id: snap.key, ...snap.val() };
+      if (new Date(b.createdAt).getTime() > cutoff) onBooking(b);
+    });
+    this._ref('events').orderByChild('createdAt').limitToLast(1).on('child_added', snap => {
+      const e = { id: snap.key, ...snap.val() };
+      if (new Date(e.createdAt).getTime() > cutoff) onEvent(e);
+    });
+  },
+
   // --- IMAGE HANDLING ---
   _compressImage(file, maxWidth = 600, quality = 0.65) {
     return new Promise((resolve, reject) => {
