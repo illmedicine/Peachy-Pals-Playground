@@ -897,6 +897,9 @@ function renderBookingCard(b, isAdmin) {
       </div>
       <dl class="booking-detail-grid">
         <dt>Confirmation:</dt><dd>${b.confirmationCode || 'N/A'}</dd>
+        <dt>Guest:</dt><dd>${escapeHtml((b.firstName || '') + ' ' + (b.lastName || '')).trim() || 'N/A'}</dd>
+        ${isAdmin ? `<dt>Phone:</dt><dd><a href="tel:${escapeHtml(b.phone || '')}" style="color:var(--peach-dark);font-weight:700">${escapeHtml(b.phone || 'N/A')}</a></dd>` : ''}
+        ${isAdmin ? `<dt>Email:</dt><dd><a href="mailto:${escapeHtml(b.email || '')}" style="color:var(--teal-dark)">${escapeHtml(b.email || 'N/A')}</a></dd>` : ''}
         <dt>Date:</dt><dd>${formatDateDisplay(b.date)}</dd>
         <dt>Time:</dt><dd>${b.timeSlot || 'N/A'}</dd>
         <dt>Child:</dt><dd>${escapeHtml(b.childName || '')} (Age ${b.childAge || ''})</dd>
@@ -1501,7 +1504,17 @@ async function adminSelectDate(dateStr) {
     <h3>${formatDateDisplay(dateStr)}</h3>
     <p style="margin:0.5rem 0"><strong>Status:</strong> ${isBlocked ? '🔴 Blocked' : '🟢 Available'}</p>
     <p><strong>Bookings:</strong> ${dayBookings.length}</p>
-    ${dayBookings.map(b => `<p style="font-size:0.85rem;margin:0.25rem 0">• ${escapeHtml(b.packageName)} — ${b.timeSlot} (${escapeHtml(b.lastName)})</p>`).join('')}
+    ${dayBookings.map(b => `
+      <div style="background:var(--cream);border-radius:8px;padding:0.6rem 0.75rem;margin:0.4rem 0;font-size:0.85rem">
+        <div style="font-weight:700">${escapeHtml(b.packageName)} — ${b.timeSlot}</div>
+        <div>${escapeHtml(b.firstName || '')} ${escapeHtml(b.lastName || '')} · ${b.numberOfKids || 0} kids</div>
+        <div><a href="tel:${escapeHtml(b.phone || '')}" style="color:var(--peach-dark);font-weight:600"><i class="fas fa-phone" style="font-size:0.75rem"></i> ${escapeHtml(b.phone || 'No phone')}</a></div>
+        <div><a href="mailto:${escapeHtml(b.email || '')}" style="color:var(--teal-dark)"><i class="fas fa-envelope" style="font-size:0.75rem"></i> ${escapeHtml(b.email || 'No email')}</a></div>
+        <div style="margin-top:0.3rem">
+          <span style="background:${b.status === 'confirmed' ? 'var(--bamboo)' : b.status === 'cancelled' ? '#e53935' : 'var(--peach)'};color:#fff;font-size:0.7rem;padding:0.1rem 0.5rem;border-radius:10px">${b.status || 'pending'}</span>
+          ${b.depositPaid ? '<span style="font-size:0.75rem;color:var(--bamboo);margin-left:0.4rem">✅ Deposit paid</span>' : '<span style="font-size:0.75rem;color:var(--gray);margin-left:0.4rem">⏳ Deposit pending</span>'}
+        </div>
+      </div>`).join('')}
     <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
       <button class="btn ${isBlocked ? 'btn-success' : 'btn-danger'} btn-sm" onclick="toggleBlockDate('${dateStr}', ${!isBlocked})">
         ${isBlocked ? '<i class="fas fa-check"></i> Unblock Date' : '<i class="fas fa-ban"></i> Block Date'}
