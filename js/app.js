@@ -252,7 +252,7 @@ function renderPackageCard(pkg, selectable = false) {
         <h3>${escapeHtml(pkg.name)}</h3>
         ${pkg.subtitle ? `<div class="pkg-card-subtitle">${escapeHtml(pkg.subtitle)}</div>` : ''}
         <p>${escapeHtml(pkg.description || '')}</p>
-        ${pkg.blocksEntireDay ? '<div style="display:inline-block;background:#7c3aed;color:#fff;font-size:0.75rem;font-weight:700;padding:0.2rem 0.7rem;border-radius:20px;margin-bottom:0.5rem">🔒 Exclusive Full-Facility Rental</div>' : ''}
+        ${pkg.blocksEntireDay ? '<div style="display:inline-block;background:#7c3aed;color:#fff;font-size:0.75rem;font-weight:700;padding:0.2rem 0.7rem;border-radius:20px;margin-bottom:0.5rem">🔒 Private Exclusive Rental</div>' : ''}
         <div class="pkg-card-price">${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? 'From $' + pkg.price : '$' + pkg.price}<small> ${pkg.maxGuests ? '/ up to ' + pkg.maxGuests + ' guests' : ''}</small></div>
         ${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? `<div class="pkg-card-rates"><span>Tue–Thu: $${pkg.price}</span> <span>Wknd/Mon: $${pkg.weekendPrice}</span></div>` : ''}
         ${includesHtml ? `<ul class="pkg-card-includes">${includesHtml}</ul>` : ''}
@@ -1133,7 +1133,7 @@ async function loadAdminPackages() {
         <h3>${escapeHtml(pkg.name)}</h3>
         <div class="price">$${pkg.price}${pkg.weekendPrice && pkg.weekendPrice !== pkg.price ? ' / $' + pkg.weekendPrice + ' wknd' : ''}</div>
         <p style="font-size:0.85rem;color:var(--gray);margin-top:0.25rem">${escapeHtml(pkg.subtitle || '')} · Max ${pkg.maxGuests || '?'} guests</p>
-        ${pkg.blocksEntireDay ? '<p style="font-size:0.8rem;color:#7c3aed;font-weight:700;margin-top:0.2rem">🔒 Private — Blocks Entire Day</p>' : ''}
+        ${pkg.blocksEntireDay ? '<p style="font-size:0.8rem;color:#7c3aed;font-weight:700;margin-top:0.2rem">🔒 Private — Exclusive 4-Hour Rental</p>' : ''}
         <p style="font-size:0.85rem;color:${pkg.active !== false ? 'var(--bamboo)' : '#e53935'};font-weight:700;margin-top:0.25rem">${pkg.active !== false ? '● Active' : '● Inactive'}</p>
         <div class="admin-pkg-actions">
           <button class="btn btn-outline btn-sm" onclick="openPackageEditor('${pkg.id}')"><i class="fas fa-edit"></i> Edit</button>
@@ -1191,8 +1191,8 @@ function openPackageEditor(pkgId) {
         <label><input type="checkbox" id="pkgActive" ${pkg?.active !== false ? 'checked' : ''}> Active (visible to customers)</label>
       </div>
       <div class="form-group">
-        <label><input type="checkbox" id="pkgBlocksDay" ${pkg?.blocksEntireDay ? 'checked' : ''}> 🔒 Private Party — blocks entire facility for the day</label>
-        <p style="font-size:0.8rem;color:var(--gray);margin-top:0.25rem">When booked, the calendar will be fully blocked — no walk-ins or other parties that day.</p>
+        <label><input type="checkbox" id="pkgBlocksDay" ${pkg?.blocksEntireDay ? 'checked' : ''}> 🔒 Private Party — exclusive facility rental</label>
+        <p style="font-size:0.8rem;color:var(--gray);margin-top:0.25rem">When booked, no other parties or walk-ins will be scheduled during this party's time block.</p>
       </div>
       <div style="display:flex;gap:1rem;margin-top:1rem">
         <button class="btn btn-primary" onclick="savePackageAdmin('${pkgId || ''}')"><i class="fas fa-save"></i> Save Package</button>
