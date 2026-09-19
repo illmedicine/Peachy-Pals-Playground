@@ -24,6 +24,10 @@ const CONFIG = {
   weekdayPriceDays: ['Tuesday', 'Wednesday', 'Thursday'],
   businessPhone: '(770) 387-1020',
   businessEmail: 'info@kdconcierge.com',
+  // Public site URL used in outgoing emails (booking links, logo, unsubscribe).
+  // Leave blank to use the browser's current origin. Set to the production URL
+  // to keep links valid when admin sends blasts from a local dev server.
+  siteUrl: 'https://peachypalsplay.com',
   web3formsKey: '753e859f-90fd-491d-8678-c358b6d9996d',
   // EmailJS config — sign up free at emailjs.com, create a service + template
   emailjsPublicKey: '',   // paste your public key here
@@ -53,6 +57,8 @@ let allBookings = [];
 let isAdminLoggedIn = false;
 let selectedMembershipPlan = null;
 let dateBookings = [];
+let appliedPromo = null;         // { id, code, percentOff, description }
+let pendingUrlPromoCode = null;  // captured from ?promo= on load, applied when checkout renders
 
 // ==========================================
 // NAVIGATION & ROUTING
@@ -339,8 +345,22 @@ function bookingStep(step) {
 
   // Step-specific initialization
   if (step === 2) initCalendar();
-  if (step === 3) renderBookingAddOns();
+  if (step === 3) { renderBookingAddOns(); populateBookingDobOptions(); }
   if (step === 4) renderPaymentSummary();
+}
+
+function populateBookingDobOptions() {
+  const mo = document.getElementById('bkChildBirthMonth');
+  const yr = document.getElementById('bkChildBirthYear');
+  if (mo && !mo.dataset.populated) {
+    mo.innerHTML = buildMonthOptions();
+    mo.dataset.populated = '1';
+  }
+  if (yr && !yr.dataset.populated) {
+    // Birthday child likely 0–18 years old
+    yr.innerHTML = buildYearOptions(null, 0, 18);
+    yr.dataset.populated = '1';
+  }
 }
 
 function validateAndGoStep4() {
@@ -352,6 +372,13 @@ function validateAndGoStep4() {
       showToast('Please fill in all required fields', 'error');
       return;
     }
+  }
+  const bm = document.getElementById('bkChildBirthMonth')?.value;
+  const by = document.getElementById('bkChildBirthYear')?.value;
+  if (!bm || !by) {
+    showToast('Please select the birthday child\'s birth month and year', 'error');
+    document.getElementById(bm ? 'bkChildBirthYear' : 'bkChildBirthMonth')?.focus();
+    return;
   }
 
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
@@ -454,60 +481,156 @@ function getAddOnsTotal() {
   return getSelectedAddOns().reduce((sum, a) => sum + a.price, 0);
 }
 
-function renderPaymentSummary() {
+function computeBookingTotals() {
   const pkg = selectedPackage;
   const basePrice = getPriceForDate(pkg, selectedDate);
-  const rateType = isWeekdayRate(selectedDate) ? 'Tue–Thu rate' : 'Weekend/Mon rate';
   const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
   const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
   const extraFee = extraKids * (pkg.extraGuestFee || 0);
   const selectedAddOns = getSelectedAddOns();
   const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
-  const subtotal = basePrice + extraFee + addOnsTotal;
+  const preDiscountSubtotal = basePrice + extraFee + addOnsTotal;
+  const discount = appliedPromo ? Math.round(preDiscountSubtotal * (appliedPromo.percentOff / 100) * 100) / 100 : 0;
+  const subtotal = Math.max(0, preDiscountSubtotal - discount);
   const tax = Math.round(subtotal * CONFIG.taxRate * 100) / 100;
   const total = subtotal + tax;
   const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
+  return { pkg, basePrice, numKids, extraKids, extraFee, selectedAddOns, addOnsTotal, preDiscountSubtotal, discount, subtotal, tax, total, deposit };
+}
 
-  const addOnsHtml = selectedAddOns.map(a =>
+function renderPaymentSummary() {
+  // If URL brought a promo, try to apply it (once) before rendering totals
+  if (pendingUrlPromoCode && !appliedPromo) {
+    const input = document.getElementById('bkPromoCode');
+    if (input) input.value = pendingUrlPromoCode;
+    applyPromoCode(pendingUrlPromoCode, /*silent*/true);
+    pendingUrlPromoCode = null;
+  }
+
+  const t = computeBookingTotals();
+  const rateType = isWeekdayRate(selectedDate) ? 'Tue–Thu rate' : 'Weekend/Mon rate';
+  const addOnsHtml = t.selectedAddOns.map(a =>
     `<tr><td style="padding-left:1rem;color:var(--gray)">+ ${escapeHtml(a.name)}${a.quantity > 1 ? ' x' + a.quantity : ''}</td><td>+$${a.price.toFixed(2)}</td></tr>`
   ).join('');
+
+  const discountRow = appliedPromo ? `
+      <tr><td style="color:var(--peach-dark)"><strong>Promo (${escapeHtml(appliedPromo.code)}) −${appliedPromo.percentOff}%:</strong></td><td style="color:var(--peach-dark)">−$${t.discount.toFixed(2)}</td></tr>
+  ` : '';
 
   document.getElementById('paymentSummary').innerHTML = `
     <h3 style="margin-bottom:1rem">Booking Summary</h3>
     <table style="width:100%;font-size:0.95rem">
-      <tr><td><strong>Package:</strong></td><td>${escapeHtml(pkg.name)}</td></tr>
+      <tr><td><strong>Package:</strong></td><td>${escapeHtml(t.pkg.name)}</td></tr>
       <tr><td><strong>Date:</strong></td><td>${formatDateDisplay(selectedDate)}</td></tr>
       <tr><td><strong>Time:</strong></td><td>${selectedTime}</td></tr>
-      <tr><td><strong>Rate:</strong></td><td>${rateType} — $${basePrice} base</td></tr>
+      <tr><td><strong>Rate:</strong></td><td>${rateType} — $${t.basePrice} base</td></tr>
       <tr><td><strong>Guest:</strong></td><td>${escapeHtml(document.getElementById('bkChildName').value)}</td></tr>
-      <tr><td><strong>Kids:</strong></td><td>${numKids}</td></tr>
-      ${extraKids > 0 ? `<tr><td><strong>Extra kids (${extraKids}):</strong></td><td>+$${extraFee}</td></tr>` : ''}
+      <tr><td><strong>Kids:</strong></td><td>${t.numKids}</td></tr>
+      ${t.extraKids > 0 ? `<tr><td><strong>Extra kids (${t.extraKids}):</strong></td><td>+$${t.extraFee}</td></tr>` : ''}
       ${addOnsHtml ? `<tr><td><strong>Add-ons:</strong></td><td></td></tr>${addOnsHtml}` : ''}
       <tr><td colspan="2"><hr style="margin:0.5rem 0"></td></tr>
-      <tr><td style="color:var(--gray)">Subtotal:</td><td>$${subtotal.toFixed(2)}</td></tr>
-      <tr><td style="color:var(--gray)">Georgia Sales Tax (7%):</td><td>$${tax.toFixed(2)}</td></tr>
+      <tr><td style="color:var(--gray)">Pre-discount subtotal:</td><td>$${t.preDiscountSubtotal.toFixed(2)}</td></tr>
+      ${discountRow}
+      <tr><td style="color:var(--gray)">Subtotal:</td><td>$${t.subtotal.toFixed(2)}</td></tr>
+      <tr><td style="color:var(--gray)">Georgia Sales Tax (7%):</td><td>$${t.tax.toFixed(2)}</td></tr>
       <tr><td colspan="2"><hr style="margin:0.5rem 0"></td></tr>
-      <tr><td><strong>Total:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${total.toFixed(2)}</td></tr>
-      <tr><td><strong>Deposit (${CONFIG.depositPercent}%):</strong></td><td style="font-size:1.2rem;font-weight:900;color:var(--teal-dark)">$${deposit}</td></tr>
+      <tr><td><strong>Total:</strong></td><td style="font-size:1.3rem;font-weight:900;color:var(--peach-dark)">$${t.total.toFixed(2)}</td></tr>
+      <tr><td><strong>Deposit (${CONFIG.depositPercent}%):</strong></td><td style="font-size:1.2rem;font-weight:900;color:var(--teal-dark)">$${t.deposit}</td></tr>
     </table>
   `;
 
   initSquareCardForm('squareCardBooking');
 }
 
+// ---- Promo code helpers ----
+function isPromoCurrentlyValid(promo, forDate = null) {
+  if (!promo || promo.active === false) return { ok: false, reason: 'This promo code is not active.' };
+  const now = new Date();
+  const check = forDate ? new Date(forDate) : now;
+  if (promo.validMonth) {
+    // 1–12 — must match booking's birthday month OR current calendar month if no forDate
+    const m = check.getMonth() + 1;
+    if (parseInt(promo.validMonth) !== m) {
+      return { ok: false, reason: `This code is only valid for ${MONTH_NAMES[promo.validMonth - 1]}.` };
+    }
+  }
+  if (promo.startDate && new Date(promo.startDate) > now) {
+    return { ok: false, reason: 'This code is not active yet.' };
+  }
+  if (promo.endDate && new Date(promo.endDate) < now) {
+    return { ok: false, reason: 'This code has expired.' };
+  }
+  if (promo.maxUses && (promo.usageCount || 0) >= promo.maxUses) {
+    return { ok: false, reason: 'This code has reached its usage limit.' };
+  }
+  return { ok: true };
+}
+
+async function applyPromoCode(codeOverride, silent = false) {
+  const input = document.getElementById('bkPromoCode');
+  const status = document.getElementById('promoCodeStatus');
+  const clearBtn = document.getElementById('btnClearPromo');
+  const raw = (codeOverride || input?.value || '').trim().toUpperCase();
+  if (!raw) {
+    if (!silent) { showToast('Please enter a promo code', 'error'); }
+    return;
+  }
+  try {
+    const promo = await DataStore.findPromoCode(raw);
+    if (!promo) {
+      appliedPromo = null;
+      if (status) { status.style.display = 'block'; status.className = 'promo-code-status invalid'; status.textContent = 'Code not found.'; }
+      if (clearBtn) clearBtn.style.display = 'none';
+      renderPaymentSummary();
+      return;
+    }
+    const check = isPromoCurrentlyValid(promo);
+    if (!check.ok) {
+      appliedPromo = null;
+      if (status) { status.style.display = 'block'; status.className = 'promo-code-status invalid'; status.textContent = check.reason; }
+      if (clearBtn) clearBtn.style.display = 'none';
+      renderPaymentSummary();
+      return;
+    }
+    appliedPromo = {
+      id: promo.id,
+      code: promo.code,
+      percentOff: parseFloat(promo.percentOff) || 10,
+      description: promo.description || ''
+    };
+    if (input) input.value = promo.code;
+    if (status) {
+      status.style.display = 'block';
+      status.className = 'promo-code-status valid';
+      status.textContent = `✅ ${promo.code} applied — ${appliedPromo.percentOff}% off${promo.description ? ' · ' + promo.description : ''}`;
+    }
+    if (clearBtn) clearBtn.style.display = 'inline-flex';
+    if (!silent) showToast(`Promo applied: ${appliedPromo.percentOff}% off`, 'success');
+    renderPaymentSummary();
+  } catch (e) {
+    console.warn('applyPromoCode failed:', e);
+    if (!silent) showToast('Could not apply promo code.', 'error');
+  }
+}
+
+function clearPromoCode() {
+  appliedPromo = null;
+  const input = document.getElementById('bkPromoCode');
+  const status = document.getElementById('promoCodeStatus');
+  const clearBtn = document.getElementById('btnClearPromo');
+  if (input) input.value = '';
+  if (status) { status.style.display = 'none'; status.textContent = ''; }
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderPaymentSummary();
+}
+
 async function submitBooking() {
 
-  const pkg = selectedPackage;
-  const basePrice = getPriceForDate(pkg, selectedDate);
-  const numKids = parseInt(document.getElementById('bkNumKids').value) || 0;
-  const extraKids = Math.max(0, numKids - (pkg.maxGuests || 0));
-  const selectedAddOns = getSelectedAddOns();
-  const addOnsTotal = selectedAddOns.reduce((sum, a) => sum + a.price, 0);
-  const subtotal = basePrice + extraKids * (pkg.extraGuestFee || 0) + addOnsTotal;
-  const taxAmount = Math.round(subtotal * CONFIG.taxRate * 100) / 100;
-  const total = subtotal + taxAmount;
-  const deposit = Math.ceil(total * CONFIG.depositPercent / 100);
+  const t = computeBookingTotals();
+  const pkg = t.pkg;
   const pkgDuration = getPackageDuration(pkg);
+  const childBirthMonth = parseInt(document.getElementById('bkChildBirthMonth')?.value) || null;
+  const childBirthYear = parseInt(document.getElementById('bkChildBirthYear')?.value) || null;
 
   const booking = {
     firstName: document.getElementById('bkFirstName').value.trim(),
@@ -516,26 +639,37 @@ async function submitBooking() {
     email: document.getElementById('bkEmail').value.trim(),
     childName: document.getElementById('bkChildName').value.trim(),
     childAge: parseInt(document.getElementById('bkChildAge').value) || 0,
+    childBirthMonth,
+    childBirthYear,
     packageId: pkg.id,
     packageName: pkg.name,
     date: selectedDate,
     timeSlot: selectedTime,
     bookingStartHour: timeToHour(selectedTime),
     bookingDuration: pkgDuration,
-    numberOfKids: numKids,
+    numberOfKids: t.numKids,
     numberOfAdults: parseInt(document.getElementById('bkNumAdults').value) || 0,
     specialRequests: document.getElementById('bkRequests').value.trim(),
-    addOns: selectedAddOns,
-    addOnsTotal: addOnsTotal,
-    subtotal: subtotal,
-    taxAmount: taxAmount,
+    addOns: t.selectedAddOns,
+    addOnsTotal: t.addOnsTotal,
+    preDiscountSubtotal: t.preDiscountSubtotal,
+    promoCode: appliedPromo ? appliedPromo.code : null,
+    promoCodeId: appliedPromo ? appliedPromo.id : null,
+    promoDiscount: t.discount,
+    subtotal: t.subtotal,
+    taxAmount: t.tax,
+    marketingOptIn: !!document.getElementById('bkMarketingOptIn')?.checked,
     status: 'pending',
     depositPaid: false,
-    depositAmount: deposit,
-    totalPrice: total,
+    depositAmount: t.deposit,
+    totalPrice: t.total,
     paymentMethod: 'square',
     isPrivateBooking: !!pkg.blocksEntireDay
   };
+
+  // Local aliases used later in this function
+  const total = t.total;
+  const deposit = t.deposit;
 
   // Try Square payment if card was filled in
   if (squareCard && CONFIG.squarePayEndpoint) {
@@ -572,6 +706,9 @@ async function submitBooking() {
 
   try {
     const result = await DataStore.createBooking(booking);
+    if (appliedPromo?.id) {
+      try { await DataStore.incrementPromoUsage(appliedPromo.id); } catch(e) { console.warn('promo usage:', e); }
+    }
     launchConfetti();
     showToast('Booking created successfully!', 'success');
 
@@ -628,10 +765,17 @@ function resetBookingForm() {
   selectedPackage = null;
   selectedDate = null;
   selectedTime = null;
-  ['bkFirstName', 'bkLastName', 'bkPhone', 'bkEmail', 'bkChildName', 'bkChildAge', 'bkNumKids', 'bkNumAdults', 'bkRequests'].forEach(id => {
+  appliedPromo = null;
+  ['bkFirstName', 'bkLastName', 'bkPhone', 'bkEmail', 'bkChildName', 'bkChildAge', 'bkNumKids', 'bkNumAdults', 'bkRequests', 'bkPromoCode', 'bkChildBirthMonth', 'bkChildBirthYear'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = id === 'bkNumAdults' ? '0' : '';
   });
+  const optIn = document.getElementById('bkMarketingOptIn');
+  if (optIn) optIn.checked = true;
+  const clearBtn = document.getElementById('btnClearPromo');
+  if (clearBtn) clearBtn.style.display = 'none';
+  const status = document.getElementById('promoCodeStatus');
+  if (status) { status.style.display = 'none'; status.textContent = ''; }
 }
 
 // ==========================================
@@ -1078,6 +1222,8 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminBlog') loadAdminBlog();
   if (tabId === 'adminEvents') loadAdminEvents();
   if (tabId === 'adminMembers') loadAdminMembers();
+  if (tabId === 'adminPromos') loadAdminPromos();
+  if (tabId === 'adminBirthdays') initBirthdayMarketing();
 }
 
 // Admin: Bookings
@@ -1920,15 +2066,30 @@ function initWaiverView() {
   }
 }
 
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function buildMonthOptions(selected) {
+  return '<option value="">Month…</option>' +
+    MONTH_NAMES.map((m, i) => `<option value="${i + 1}"${selected == i + 1 ? ' selected' : ''}>${m}</option>`).join('');
+}
+
+function buildYearOptions(selected, minYearsAgo = 0, maxYearsAgo = 100) {
+  const now = new Date().getFullYear();
+  let html = '<option value="">Year…</option>';
+  for (let y = now - minYearsAgo; y >= now - maxYearsAgo; y--) {
+    html += `<option value="${y}"${selected == y ? ' selected' : ''}>${y}</option>`;
+  }
+  return html;
+}
+
 function buildChildRow(idx, removable = false) {
   return `
     <div class="waiver-child-row" data-child-index="${idx}">
       <div class="form-row" style="align-items:flex-end">
-        <div class="form-group" style="flex:2"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-        <div class="form-group"><label>Months <small style="color:var(--gray)">(under 1 yr)</small></label><input type="number" class="wv-child-months" min="0" max="11" placeholder="0–11" oninput="exclusiveAge(this,'months')"></div>
-        <div class="age-or">or</div>
-        <div class="form-group"><label>Years <small style="color:var(--gray)">(1–100)</small></label><input type="number" class="wv-child-years" min="1" max="100" placeholder="1–100" oninput="exclusiveAge(this,'years')"></div>
-        ${removable ? `<button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.waiver-child-row').remove()" style="align-self:flex-end;margin-bottom:0.5rem;padding:0.4rem 0.6rem" title="Remove child">&times;</button>` : ''}
+        <div class="form-group" style="flex:2;min-width:180px"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
+        <div class="form-group"><label>Birth Month *</label><select class="wv-child-birth-month" required>${buildMonthOptions()}</select></div>
+        <div class="form-group"><label>Birth Year *</label><select class="wv-child-birth-year" required>${buildYearOptions()}</select></div>
+        ${removable ? `<div class="form-group" style="flex:0 0 auto;max-width:60px"><label>&nbsp;</label><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('.waiver-child-row').remove()" style="padding:0.55rem 0.75rem" title="Remove child">&times;</button></div>` : ''}
       </div>
     </div>`;
 }
@@ -2015,36 +2176,46 @@ function updateWaiverSubmitBtn() {
   if (btn) btn.disabled = !(agreed && sig);
 }
 
+function computeAgeFromDob(birthMonth, birthYear) {
+  if (!birthMonth || !birthYear) return null;
+  const now = new Date();
+  let years = now.getFullYear() - birthYear;
+  let months = now.getMonth() + 1 - birthMonth;
+  if (months < 0) { years -= 1; months += 12; }
+  if (years < 0) return null;
+  if (years < 1) {
+    return months === 0 ? 'Newborn' : months + (months === 1 ? ' month' : ' months');
+  }
+  return years + (years === 1 ? ' year' : ' years');
+}
+
 function getWaiverChildren() {
-  const rows = document.querySelectorAll('.waiver-child-row');
+  const rows = document.querySelectorAll('#waiverChildrenList .waiver-child-row');
   const children = [];
   rows.forEach(row => {
     const name = row.querySelector('.wv-child-name')?.value.trim();
-    const monthsEl = row.querySelector('.wv-child-months');
-    const yearsEl = row.querySelector('.wv-child-years');
-    const months = monthsEl?.value;
-    const years = yearsEl?.value;
+    const birthMonth = parseInt(row.querySelector('.wv-child-birth-month')?.value) || null;
+    const birthYear = parseInt(row.querySelector('.wv-child-birth-year')?.value) || null;
     if (!name) return;
-    let age;
-    if (months !== '' && months != null && !monthsEl.disabled) {
-      const m = parseInt(months);
-      age = m === 0 ? 'Newborn' : m + (m === 1 ? ' month' : ' months');
-    } else if (years !== '' && years != null) {
-      const y = parseInt(years);
-      age = y + (y === 1 ? ' year' : ' years');
-    } else {
-      age = null;
-    }
-    children.push({ name, age });
+    children.push({
+      name,
+      birthMonth,
+      birthYear,
+      age: computeAgeFromDob(birthMonth, birthYear)
+    });
   });
   return children;
 }
 
 function validateWaiverChildren() {
-  const children = getWaiverChildren();
-  for (const c of children) {
-    if (!c.age) {
-      showToast('Please enter an age (months or years) for each child', 'error');
+  const rows = document.querySelectorAll('#waiverChildrenList .waiver-child-row');
+  for (const row of rows) {
+    const name = row.querySelector('.wv-child-name')?.value.trim();
+    if (!name) continue;
+    const bm = row.querySelector('.wv-child-birth-month')?.value;
+    const by = row.querySelector('.wv-child-birth-year')?.value;
+    if (!bm || !by) {
+      showToast('Please select birth month and year for each child', 'error');
       return false;
     }
   }
@@ -2091,6 +2262,7 @@ async function submitWaiver() {
     confirmationCode: selectedWaiverBooking?.confirmationCode || null,
     bookingDate: selectedWaiverBooking?.date || null,
     bookingPackage: selectedWaiverBooking?.packageName || null,
+    marketingOptIn: !!document.getElementById('wvMarketingOptIn')?.checked,
     status: 'active'
   };
 
@@ -2835,6 +3007,24 @@ async function deleteAdminPost(id) {
 // INITIALIZATION
 // ==========================================
 async function init() {
+  // Detect ?promo=CODE (or #booking?promo=CODE) so it auto-applies at checkout
+  try {
+    const search = new URLSearchParams(window.location.search);
+    const fromQuery = search.get('promo');
+    const hashRaw = window.location.hash || '';
+    const hashQ = hashRaw.includes('?') ? new URLSearchParams(hashRaw.split('?')[1]) : null;
+    const fromHash = hashQ?.get('promo');
+    const promo = (fromQuery || fromHash || '').trim().toUpperCase();
+    if (promo) {
+      pendingUrlPromoCode = promo;
+      sessionStorage.setItem('pp_url_promo', promo);
+    } else {
+      // Restore across in-app navigation
+      const saved = sessionStorage.getItem('pp_url_promo');
+      if (saved) pendingUrlPromoCode = saved;
+    }
+  } catch(e) { console.warn('promo URL parse:', e); }
+
   // Seed and load data — each step wrapped so one failure doesn't block the rest
   try { await DataStore.seedDefaults(); } catch(e) { console.warn('seedDefaults:', e); }
   try { await DataStore.seedPrivatePackage(); } catch(e) { console.warn('seedPrivatePackage:', e); }
@@ -2873,6 +3063,398 @@ async function init() {
 
   // Start live activity popup listener
   initActivityPopups();
+
+  // Live presence + visitor count popups
+  initPresenceTracker();
+}
+
+// ==========================================
+// ADMIN: PROMO CODES
+// ==========================================
+async function loadAdminPromos() {
+  const list = document.getElementById('adminPromosList');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+  try {
+    const codes = await DataStore.getPromoCodes();
+    if (codes.length === 0) {
+      list.innerHTML = '<div class="no-bookings-msg">No promo codes yet. Click <strong>New Promo Code</strong> to create one.</div>';
+      return;
+    }
+    list.innerHTML = `
+      <table class="admin-table promo-table">
+        <thead>
+          <tr><th>Code</th><th>Discount</th><th>Valid</th><th>Uses</th><th>Description</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          ${codes.map(c => renderPromoRow(c)).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    console.warn('loadAdminPromos:', e);
+    list.innerHTML = '<p style="color:#e53935">Could not load promo codes.</p>';
+  }
+}
+
+function renderPromoRow(c) {
+  const inactive = c.active === false;
+  const usage = (c.usageCount || 0) + (c.maxUses ? ` / ${c.maxUses}` : '');
+  let validText = 'Always';
+  if (c.validMonth) validText = `${MONTH_NAMES[c.validMonth - 1]} only`;
+  else if (c.startDate || c.endDate) {
+    const s = c.startDate ? new Date(c.startDate).toLocaleDateString() : '—';
+    const e = c.endDate ? new Date(c.endDate).toLocaleDateString() : '—';
+    validText = `${s} → ${e}`;
+  }
+  return `
+    <tr class="${inactive ? 'promo-inactive' : ''}">
+      <td><strong>${escapeHtml(c.code)}</strong>${inactive ? ' <span class="pill pill-gray">Inactive</span>' : ''}${c.autoGenerated ? ' <span class="pill pill-peach">Birthday</span>' : ''}</td>
+      <td>${c.percentOff || 0}% off</td>
+      <td>${validText}</td>
+      <td>${usage}</td>
+      <td style="color:var(--gray);font-size:0.85rem">${escapeHtml(c.description || '')}</td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openPromoEditor('${c.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="deleteAdminPromo('${c.id}','${escapeHtml(c.code)}')" title="Delete"><i class="fas fa-trash"></i></button>
+      </td>
+    </tr>
+  `;
+}
+
+async function openPromoEditor(id) {
+  let promo = { code: '', percentOff: 10, validMonth: '', startDate: '', endDate: '', maxUses: '', description: '', active: true };
+  if (id) {
+    try {
+      const all = await DataStore.getPromoCodes();
+      promo = all.find(c => c.id === id) || promo;
+    } catch (e) { console.warn(e); }
+  }
+  const monthOpts = ['<option value="">Any month</option>'].concat(
+    MONTH_NAMES.map((m, i) => `<option value="${i + 1}"${promo.validMonth == i + 1 ? ' selected' : ''}>${m}</option>`)
+  ).join('');
+  const startDate = promo.startDate ? new Date(promo.startDate).toISOString().slice(0, 10) : '';
+  const endDate = promo.endDate ? new Date(promo.endDate).toISOString().slice(0, 10) : '';
+  openModal(`
+    <h2><i class="fas fa-tag" style="color:var(--peach)"></i> ${id ? 'Edit' : 'New'} Promo Code</h2>
+    <form class="booking-form" id="promoEditForm" onsubmit="return false" style="margin-top:1rem">
+      <div class="form-row">
+        <div class="form-group" style="flex:2"><label>Code *</label><input type="text" id="promoCode" value="${escapeHtml(promo.code)}" placeholder="e.g. BIRTHDAY10" oninput="this.value=this.value.toUpperCase()" required></div>
+        <div class="form-group"><label>% Off *</label><input type="number" id="promoPercent" value="${promo.percentOff || 10}" min="1" max="100" required></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Valid Month <small style="color:var(--gray)">(optional)</small></label><select id="promoMonth">${monthOpts}</select></div>
+        <div class="form-group"><label>Max Uses <small style="color:var(--gray)">(optional)</small></label><input type="number" id="promoMaxUses" value="${promo.maxUses || ''}" min="1" placeholder="Unlimited"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Start Date <small style="color:var(--gray)">(optional)</small></label><input type="date" id="promoStart" value="${startDate}"></div>
+        <div class="form-group"><label>End Date <small style="color:var(--gray)">(optional)</small></label><input type="date" id="promoEnd" value="${endDate}"></div>
+      </div>
+      <div class="form-group"><label>Description</label><input type="text" id="promoDesc" value="${escapeHtml(promo.description || '')}" placeholder="e.g. Birthday month promo for Lucy"></div>
+      <label class="agreement-checkbox" style="margin-top:0.5rem">
+        <input type="checkbox" id="promoActive" ${promo.active !== false ? 'checked' : ''}>
+        <span>Active (uncheck to disable without deleting)</span>
+      </label>
+      <div class="step-nav" style="margin-top:1rem">
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="savePromoFromEditor('${id || ''}')"><i class="fas fa-save"></i> Save Promo</button>
+      </div>
+    </form>
+  `);
+}
+
+async function savePromoFromEditor(existingId) {
+  const code = document.getElementById('promoCode').value.trim().toUpperCase();
+  const percentOff = parseFloat(document.getElementById('promoPercent').value) || 0;
+  if (!code || !/^[A-Z0-9_-]+$/.test(code)) {
+    showToast('Code must be letters/numbers only', 'error'); return;
+  }
+  if (percentOff < 1 || percentOff > 100) { showToast('% off must be between 1 and 100', 'error'); return; }
+  const validMonth = document.getElementById('promoMonth').value ? parseInt(document.getElementById('promoMonth').value) : null;
+  const maxUses = document.getElementById('promoMaxUses').value ? parseInt(document.getElementById('promoMaxUses').value) : null;
+  const startDate = document.getElementById('promoStart').value ? new Date(document.getElementById('promoStart').value).toISOString() : null;
+  const endDate = document.getElementById('promoEnd').value ? new Date(document.getElementById('promoEnd').value).toISOString() : null;
+  const description = document.getElementById('promoDesc').value.trim();
+  const active = document.getElementById('promoActive').checked;
+
+  // Duplicate-code check when creating
+  if (!existingId) {
+    const dup = await DataStore.findPromoCode(code);
+    if (dup) { showToast('A promo with that code already exists', 'error'); return; }
+  }
+
+  const data = { code, percentOff, validMonth, maxUses, startDate, endDate, description, active };
+  if (existingId) data.id = existingId;
+  try {
+    await DataStore.savePromoCode(data);
+    showToast('Promo code saved', 'success');
+    closeModal();
+    loadAdminPromos();
+  } catch (e) {
+    console.error('savePromo:', e);
+    showToast('Could not save promo code', 'error');
+  }
+}
+
+async function deleteAdminPromo(id, code) {
+  if (!confirm(`Delete promo code "${code}"? This cannot be undone.`)) return;
+  try {
+    await DataStore.deletePromoCode(id);
+    showToast('Promo code deleted', 'info');
+    loadAdminPromos();
+  } catch (e) { showToast('Could not delete promo code', 'error'); }
+}
+
+// ==========================================
+// ADMIN: BIRTHDAY MARKETING
+// ==========================================
+function initBirthdayMarketing() {
+  const sel = document.getElementById('bdayMonthSel');
+  if (sel && !sel.dataset.populated) {
+    sel.innerHTML = MONTH_NAMES.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+    sel.value = String(new Date().getMonth() + 1);
+    sel.dataset.populated = '1';
+  }
+  loadBirthdayCandidates();
+}
+
+async function collectBirthdayCandidates(month) {
+  // Merge candidates from waivers (child DOB) + bookings (childBirthMonth/Year)
+  const [waivers, bookings] = await Promise.all([
+    DataStore.getAllWaivers(),
+    DataStore.getAllBookings()
+  ]);
+  const map = new Map(); // key = phone|childName lowercased
+  const push = (rec) => {
+    const key = ((rec.phone || '').replace(/\D/g, '') + '|' + (rec.childName || '').toLowerCase()).trim();
+    if (!key.includes('|') || key === '|') return;
+    const prev = map.get(key);
+    if (!prev || (rec.marketingOptIn && !prev.marketingOptIn)) map.set(key, rec);
+  };
+
+  waivers.forEach(w => {
+    const children = w.children || [];
+    children.forEach(c => {
+      if (c.birthMonth === month) {
+        push({
+          source: 'waiver',
+          waiverId: w.waiverId || w.id,
+          firstName: w.firstName || '',
+          lastName: w.lastName || '',
+          email: w.email || '',
+          phone: w.phone || '',
+          childName: c.name || '',
+          birthMonth: c.birthMonth,
+          birthYear: c.birthYear,
+          marketingOptIn: w.marketingOptIn !== false
+        });
+      }
+    });
+  });
+
+  bookings.forEach(b => {
+    if (b.childBirthMonth === month) {
+      push({
+        source: 'booking',
+        bookingId: b.id,
+        firstName: b.firstName || '',
+        lastName: b.lastName || '',
+        email: b.email || '',
+        phone: b.phone || '',
+        childName: b.childName || '',
+        birthMonth: b.childBirthMonth,
+        birthYear: b.childBirthYear,
+        marketingOptIn: b.marketingOptIn !== false
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+async function loadBirthdayCandidates() {
+  const list = document.getElementById('bdayCandidatesList');
+  const monthSel = document.getElementById('bdayMonthSel');
+  if (!list || !monthSel) return;
+  const month = parseInt(monthSel.value);
+  list.innerHTML = '<p style="color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+  try {
+    const candidates = await collectBirthdayCandidates(month);
+    if (candidates.length === 0) {
+      list.innerHTML = `<div class="no-bookings-msg">No children with a birthday in ${MONTH_NAMES[month - 1]} yet.</div>`;
+      return;
+    }
+    const optedIn = candidates.filter(c => c.marketingOptIn && c.email).length;
+    list.innerHTML = `
+      <p style="margin-bottom:0.5rem"><strong>${candidates.length}</strong> birthday${candidates.length !== 1 ? 's' : ''} in ${MONTH_NAMES[month - 1]} · <strong>${optedIn}</strong> will receive email</p>
+      <table class="admin-table bday-table">
+        <thead><tr><th>Child</th><th>Signer</th><th>Email</th><th>Phone</th><th>Opt-In</th><th>Source</th></tr></thead>
+        <tbody>
+          ${candidates.map(c => `
+            <tr class="${c.marketingOptIn && c.email ? '' : 'bday-skip'}">
+              <td><strong>${escapeHtml(c.childName)}</strong>${c.birthYear ? ` <span style="color:var(--gray);font-size:0.8rem">(${c.birthYear})</span>` : ''}</td>
+              <td>${escapeHtml(c.firstName)} ${escapeHtml(c.lastName)}</td>
+              <td>${c.email ? escapeHtml(c.email) : '<span style="color:#e53935">— missing —</span>'}</td>
+              <td>${escapeHtml(c.phone || '')}</td>
+              <td>${c.marketingOptIn ? '<span class="pill pill-teal">Yes</span>' : '<span class="pill pill-gray">No</span>'}</td>
+              <td style="color:var(--gray);font-size:0.85rem">${c.source}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    console.warn('loadBirthdayCandidates:', e);
+    list.innerHTML = '<p style="color:#e53935">Could not load candidates.</p>';
+  }
+}
+
+function generateBirthdayPromoCode(childName) {
+  const base = (childName || 'BDAY').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'BDAY';
+  const suffix = Math.random().toString(36).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  return `${base}-${suffix}`;
+}
+
+async function sendBirthdayBlast() {
+  const monthSel = document.getElementById('bdayMonthSel');
+  const month = parseInt(monthSel.value);
+  const monthName = MONTH_NAMES[month - 1];
+  if (!confirm(`Send birthday email to every opted-in family with a child born in ${monthName}? A unique 10% off promo code will be generated for each child.`)) return;
+
+  const btn = document.querySelector('#adminBirthdays button.btn-primary');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...'; }
+
+  try {
+    const candidates = await collectBirthdayCandidates(month);
+    const eligible = candidates.filter(c => c.marketingOptIn && c.email);
+    if (eligible.length === 0) {
+      showToast('No opted-in families with an email address for this month', 'info');
+      return;
+    }
+
+    // Generate a promo code for each child, valid only in birthday month
+    let sent = 0, failed = 0;
+    for (const c of eligible) {
+      const code = generateBirthdayPromoCode(c.childName);
+      const promo = {
+        code,
+        percentOff: 10,
+        validMonth: month,
+        description: `Birthday promo for ${c.childName} (${c.firstName} ${c.lastName})`,
+        active: true,
+        autoGenerated: true,
+        maxUses: 1
+      };
+      let promoId = null;
+      try { promoId = await DataStore.savePromoCode(promo); }
+      catch (e) { console.warn('save promo failed:', e); }
+
+      try {
+        await sendBirthdayEmail(c, code, monthName);
+        sent++;
+      } catch (e) {
+        console.warn('birthday email failed:', e);
+        failed++;
+      }
+    }
+    showToast(`Birthday blast complete: ${sent} sent${failed ? `, ${failed} failed` : ''}`, sent > 0 ? 'success' : 'error');
+    loadAdminPromos();
+  } catch (e) {
+    console.error('sendBirthdayBlast:', e);
+    showToast('Birthday blast failed', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Birthday Blast'; }
+  }
+}
+
+// ==========================================
+// BIRTHDAY EMAIL
+// ==========================================
+function getPublicSiteUrl() {
+  const configured = (CONFIG.siteUrl || '').trim();
+  if (configured) return configured.replace(/\/+$/, '') + '/';
+  const path = window.location.pathname.replace(/index\.html?$/, '') || '/';
+  return window.location.origin + path;
+}
+
+function buildBirthdayEmailHtml(candidate, code, monthName) {
+  const site = getPublicSiteUrl();
+  const bookingUrl = `${site}#booking?promo=${encodeURIComponent(code)}`;
+  const unsubUrl = `${site}#manage`;
+  const logo = `${site}images/logo.png`;
+  const firstName = escapeHtml(candidate.firstName || 'Friend');
+  const childName = escapeHtml(candidate.childName || 'your child');
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Happy Birthday from Peachy Pals!</title></head>
+<body style="margin:0;padding:0;background:#fff5ec;font-family:'Segoe UI',Roboto,Arial,sans-serif;color:#333">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(255,112,67,0.15)">
+    <div style="background:linear-gradient(135deg,#FF7043,#F48FB1);padding:2rem;text-align:center;color:#fff">
+      <img src="${logo}" alt="Peachy Pals Playland" style="max-width:120px;height:auto;margin-bottom:0.75rem;background:#fff;padding:0.5rem;border-radius:12px">
+      <h1 style="margin:0.5rem 0 0;font-size:1.75rem">Happy Birthday, ${childName}! 🎂🍑</h1>
+    </div>
+    <div style="padding:2rem">
+      <p style="font-size:1.05rem;line-height:1.6">Hi ${firstName},</p>
+      <p style="font-size:1.05rem;line-height:1.6">Everyone at <strong>Peachy Pals Playland</strong> wants to wish <strong>${childName}</strong> the warmest, sunniest birthday this <strong>${monthName}</strong>! We hope this year is filled with laughter, sensory fun, and lots of unforgettable playtime.</p>
+      <p style="font-size:1.05rem;line-height:1.6">To celebrate, we've made you a special birthday gift 🎁 — <strong>10% off your next booking</strong> when you use this code any time this month:</p>
+      <div style="text-align:center;margin:1.5rem 0">
+        <div style="display:inline-block;background:#FFF5EC;border:2px dashed #FF7043;padding:1rem 2rem;border-radius:12px">
+          <div style="font-size:0.85rem;color:#666;letter-spacing:0.05em">YOUR BIRTHDAY CODE</div>
+          <div style="font-family:'Courier New',monospace;font-weight:bold;font-size:1.6rem;color:#E64A19;letter-spacing:0.1em">${escapeHtml(code)}</div>
+          <div style="font-size:0.8rem;color:#666;margin-top:0.25rem">10% off · valid all of ${monthName}</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin:1.5rem 0">
+        <a href="${bookingUrl}" style="display:inline-block;background:#FF7043;color:#fff;padding:0.9rem 2rem;border-radius:999px;text-decoration:none;font-weight:bold;font-size:1.05rem;box-shadow:0 4px 14px rgba(255,112,67,0.35)">Book Your Party — 10% Applied Automatically</a>
+      </div>
+      <p style="font-size:0.95rem;line-height:1.6;color:#555">The discount applies as soon as you follow that link — no typing required. Or enter <strong>${escapeHtml(code)}</strong> at checkout.</p>
+      <p style="font-size:0.95rem;line-height:1.6;color:#555">Thank you for being part of the Peachy Pals family. We can't wait to celebrate with you soon! 🍑✨</p>
+      <p style="font-size:0.95rem;line-height:1.6;color:#555">With love,<br><strong>Cherish &amp; the Peachy Pals Team</strong></p>
+    </div>
+    <div style="background:#fdf6f0;padding:1rem 2rem;text-align:center;font-size:0.8rem;color:#888">
+      <p style="margin:0 0 0.25rem"><strong>Peachy Pals Playland</strong> · 801 West Ave Suite 201, Cartersville, GA 30120 · (770) 387-1020</p>
+      <p style="margin:0">You received this because you opted in to marketing when you signed a waiver or booked with us. <a href="${unsubUrl}" style="color:#FF7043">Manage preferences</a>.</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+async function sendBirthdayEmail(candidate, code, monthName) {
+  const html = buildBirthdayEmailHtml(candidate, code, monthName);
+  const subject = `🎂 Happy Birthday from Peachy Pals — ${code} for 10% off!`;
+  const site = getPublicSiteUrl();
+  const bookingUrl = `${site}#booking?promo=${encodeURIComponent(code)}`;
+  const plainText = `Happy Birthday, ${candidate.childName}!\n\nEveryone at Peachy Pals Playland wants to wish ${candidate.childName} the warmest ${monthName} birthday!\n\nYour birthday gift: 10% off your next booking with code ${code} (valid all ${monthName}).\n\nBook now — discount applied automatically: ${bookingUrl}\n\nWith love,\nCherish & the Peachy Pals Team\n\nPeachy Pals Playland · 801 West Ave Suite 201, Cartersville, GA 30120 · (770) 387-1020\nManage preferences: ${site}#manage`;
+
+  // EmailJS
+  if (CONFIG.emailjsServiceId && CONFIG.emailjsTemplateId && CONFIG.emailjsPublicKey) {
+    return emailjs.send(CONFIG.emailjsServiceId, CONFIG.emailjsTemplateId, {
+      to_email: candidate.email,
+      subject,
+      first_name: candidate.firstName,
+      child_name: candidate.childName,
+      promo_code: code,
+      booking_url: bookingUrl,
+      month_name: monthName,
+      html_body: html,
+      message: plainText
+    }, CONFIG.emailjsPublicKey);
+  }
+
+  // Web3Forms fallback
+  return fetch('https://api.web3forms.com/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      access_key: CONFIG.web3formsKey || '',
+      subject,
+      from_name: 'Peachy Pals Playland',
+      email: candidate.email,
+      to: candidate.email,
+      reply_to: CONFIG.businessEmail,
+      html,
+      message: plainText
+    })
+  });
 }
 
 // Start the app
@@ -3224,6 +3806,98 @@ function initActivityPopups() {
       showActivityPopup('📅', 'New event added!', escapeHtml(event.title || 'Check the Events calendar'));
     }
   );
+}
+
+// ==========================================
+// LIVE PRESENCE & VISITOR STATS
+// ==========================================
+let _presenceLastPopupAt = 0;
+
+async function fetchViewerLocation() {
+  // Free geolocation, no key required. Timeout after 4s so init isn't blocked.
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const resp = await fetch('https://ipapi.co/json/', { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return {
+      city: data.city || '',
+      region: data.region_code || data.region || '',
+      country: data.country_name || data.country || ''
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function formatViewerLocation(v) {
+  if (v.city && v.region) return `${v.city}, ${v.region}`;
+  if (v.city) return v.city;
+  if (v.region && v.country) return `${v.region}, ${v.country}`;
+  return v.country || 'somewhere';
+}
+
+function showLiveViewerPopup(viewer) {
+  // Throttle — don't spam more than one every 15s
+  const now = Date.now();
+  if (now - _presenceLastPopupAt < 15000) return;
+  _presenceLastPopupAt = now;
+  const loc = formatViewerLocation(viewer);
+  showActivityPopup('👋', 'Someone is browsing right now', `A visitor from <strong>${escapeHtml(loc)}</strong> just opened Peachy Pals`);
+}
+
+function shortNumber(n) {
+  if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  return String(n);
+}
+
+async function showTotalVisitorsPopup() {
+  try {
+    const total = await DataStore.getTotalVisits();
+    if (!total || total < 5) return; // don't show tiny counts
+    const active = await DataStore.getActivePresenceCount();
+    const sub = active > 1
+      ? `<strong>${shortNumber(total)}</strong> families have visited · ${active} browsing right now`
+      : `<strong>${shortNumber(total)}</strong> families have visited Peachy Pals`;
+    showActivityPopup('🍑', 'Peachy Pals family', sub);
+  } catch (e) { /* silent */ }
+}
+
+async function initPresenceTracker() {
+  try {
+    // One session id per tab; new one after a full close-and-reopen
+    let sessionId = sessionStorage.getItem('pp_session_id');
+    if (!sessionId) {
+      sessionId = 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      sessionStorage.setItem('pp_session_id', sessionId);
+    }
+
+    // Count each unique tab session as one visit
+    if (!sessionStorage.getItem('pp_visit_counted')) {
+      sessionStorage.setItem('pp_visit_counted', '1');
+      DataStore.incrementTotalVisits().catch(() => {});
+    }
+
+    // Kick off geolocation and presence registration in parallel
+    const ownStartMs = Date.now();
+    const location = await fetchViewerLocation();
+    await DataStore.initPresence(sessionId, location || {});
+
+    // Subscribe to new viewers arriving after us
+    DataStore.subscribePresence(sessionId, ownStartMs, (viewer) => {
+      if (viewer.city || viewer.region || viewer.country) {
+        showLiveViewerPopup(viewer);
+      }
+    });
+
+    // Discreet total-visitors popup — first one ~45s in, then every ~5min
+    setTimeout(showTotalVisitorsPopup, 45000);
+    setInterval(showTotalVisitorsPopup, 5 * 60 * 1000);
+  } catch (e) {
+    console.warn('Presence init failed:', e);
+  }
 }
 
 // ==========================================

@@ -14,7 +14,11 @@
 //     "blockedDates": { ".read": true, ".write": true },
 //     "waivers": { ".read": true, ".write": true },
 //     "notifications": { ".read": true, ".write": true },
-//     "posts": { ".read": true, ".write": true }
+//     "posts": { ".read": true, ".write": true },
+//     "events": { ".read": true, ".write": true },
+//     "promoCodes": { ".read": true, ".write": true },
+//     "presence": { ".read": true, ".write": true, ".indexOn": ["startedAt"] },
+//     "stats": { ".read": true, ".write": true }
 //   }
 // }
 //
@@ -300,6 +304,95 @@ const DataStore = {
       const e = { id: snap.key, ...snap.val() };
       if (new Date(e.createdAt).getTime() > cutoff) onEvent(e);
     });
+  },
+
+  // --- PRESENCE (live viewer tracker) ---
+  // Writes a heartbeat under /presence/{sessionId}. Uses onDisconnect to
+  // auto-remove when the browser closes. Emits on child_added for other
+  // viewers so we can show "Someone from Austin, TX is viewing…" popups.
+  async initPresence(sessionId, location) {
+    if (!isFirebaseConfigured || !sessionId) return null;
+    const ref = this._ref('presence/' + sessionId);
+    const record = {
+      sessionId,
+      city: location?.city || '',
+      region: location?.region || '',
+      country: location?.country || '',
+      startedAt: firebase.database.ServerValue.TIMESTAMP,
+      lastSeen: firebase.database.ServerValue.TIMESTAMP
+    };
+    try {
+      await ref.onDisconnect().remove();
+      await ref.set(record);
+      // Heartbeat every 30s
+      const heartbeat = setInterval(() => {
+        ref.update({ lastSeen: firebase.database.ServerValue.TIMESTAMP }).catch(() => {});
+      }, 30000);
+      // Clean removal when page hides for real
+      window.addEventListener('pagehide', () => {
+        clearInterval(heartbeat);
+        ref.remove().catch(() => {});
+      });
+      return ref;
+    } catch (e) {
+      console.warn('initPresence failed:', e);
+      return null;
+    }
+  },
+
+  subscribePresence(mySessionId, ownStartMs, onNewViewer) {
+    if (!isFirebaseConfigured) return;
+    // Only fire for records added AFTER we're set up
+    const ref = this._ref('presence');
+    ref.on('child_added', snap => {
+      const v = { id: snap.key, ...snap.val() };
+      if (!v.sessionId || v.sessionId === mySessionId) return;
+      const startedMs = v.startedAt || 0;
+      // Skip pre-existing viewers that were already on the site when we loaded
+      if (startedMs && startedMs < ownStartMs - 2000) return;
+      // Skip stale records (>2 min old)
+      if (startedMs && Date.now() - startedMs > 120000) return;
+      onNewViewer(v);
+    });
+  },
+
+  async getActivePresenceCount() {
+    if (!isFirebaseConfigured) return 0;
+    try {
+      const snap = await this._ref('presence').once('value');
+      const now = Date.now();
+      let n = 0;
+      snap.forEach(child => {
+        const v = child.val();
+        if (v && v.lastSeen && now - v.lastSeen < 90000) n++;
+      });
+      return n;
+    } catch (e) { return 0; }
+  },
+
+  // --- STATS (total visits) ---
+  async incrementTotalVisits() {
+    if (!isFirebaseConfigured) {
+      const cur = parseInt(localStorage.getItem('pp_total_visits') || '0');
+      const next = cur + 1;
+      localStorage.setItem('pp_total_visits', String(next));
+      return next;
+    }
+    try {
+      const result = await this._ref('stats/totalVisits').transaction(cur => (cur || 0) + 1);
+      return result.snapshot.val() || 0;
+    } catch (e) {
+      console.warn('incrementTotalVisits:', e);
+      return 0;
+    }
+  },
+
+  async getTotalVisits() {
+    if (!isFirebaseConfigured) return parseInt(localStorage.getItem('pp_total_visits') || '0');
+    try {
+      const snap = await this._ref('stats/totalVisits').once('value');
+      return snap.val() || 0;
+    } catch (e) { return 0; }
   },
 
   // --- IMAGE HANDLING ---
@@ -595,6 +688,97 @@ const DataStore = {
     let waivers = JSON.parse(localStorage.getItem('pp_waivers') || '[]');
     waivers = waivers.filter(w => w.id !== id);
     localStorage.setItem('pp_waivers', JSON.stringify(waivers));
+  },
+
+  // --- PROMO CODES ---
+  // Uses Firebase when reachable; on PERMISSION_DENIED (rules not yet updated)
+  // transparently falls back to localStorage so admin can keep using the feature.
+  _promoLsList() { return JSON.parse(localStorage.getItem('pp_promoCodes') || '[]'); },
+  _promoLsSave(arr) { localStorage.setItem('pp_promoCodes', JSON.stringify(arr)); },
+  _isPermDenied(e) { return e && (e.code === 'PERMISSION_DENIED' || (e.message || '').toLowerCase().includes('permission')); },
+
+  async getPromoCodes() {
+    if (isFirebaseConfigured) {
+      try {
+        const snap = await this._ref('promoCodes').once('value');
+        return this._snapToArray(snap).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      } catch (e) {
+        if (this._isPermDenied(e)) {
+          console.warn('promoCodes: Firebase rules not updated — using localStorage. Paste the updated rules from firebase-config.js.');
+          return this._promoLsList();
+        }
+        throw e;
+      }
+    }
+    return this._promoLsList();
+  },
+
+  async savePromoCode(promo) {
+    if (promo.code) promo.code = String(promo.code).toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+    promo.updatedAt = new Date().toISOString();
+    if (isFirebaseConfigured) {
+      try {
+        if (promo.id) {
+          const id = promo.id;
+          const data = { ...promo };
+          delete data.id;
+          await this._ref('promoCodes/' + id).set(data);
+          return id;
+        }
+        promo.createdAt = new Date().toISOString();
+        const data = { ...promo };
+        delete data.id;
+        const ref = this._ref('promoCodes').push();
+        await ref.set(data);
+        return ref.key;
+      } catch (e) {
+        if (!this._isPermDenied(e)) throw e;
+        console.warn('promoCodes: rule denied — writing to localStorage');
+      }
+    }
+    const codes = this._promoLsList();
+    if (promo.id) {
+      const idx = codes.findIndex(c => c.id === promo.id);
+      if (idx >= 0) codes[idx] = promo;
+      else codes.push(promo);
+    } else {
+      promo.id = 'promo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      promo.createdAt = new Date().toISOString();
+      codes.push(promo);
+    }
+    this._promoLsSave(codes);
+    return promo.id;
+  },
+
+  async deletePromoCode(id) {
+    if (isFirebaseConfigured) {
+      try { await this._ref('promoCodes/' + id).remove(); return; }
+      catch (e) { if (!this._isPermDenied(e)) throw e; }
+    }
+    let codes = this._promoLsList();
+    codes = codes.filter(c => c.id !== id);
+    this._promoLsSave(codes);
+  },
+
+  async findPromoCode(code) {
+    if (!code) return null;
+    const upper = String(code).toUpperCase().trim();
+    const all = await this.getPromoCodes();
+    return all.find(c => (c.code || '').toUpperCase() === upper) || null;
+  },
+
+  async incrementPromoUsage(id) {
+    if (!id) return;
+    if (isFirebaseConfigured) {
+      try {
+        const ref = this._ref('promoCodes/' + id + '/usageCount');
+        await ref.transaction(cur => (cur || 0) + 1);
+        return;
+      } catch (e) { if (!this._isPermDenied(e)) throw e; }
+    }
+    const codes = this._promoLsList();
+    const c = codes.find(x => x.id === id);
+    if (c) { c.usageCount = (c.usageCount || 0) + 1; this._promoLsSave(codes); }
   },
 
   // --- POSTS (Blog) ---

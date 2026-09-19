@@ -1,0 +1,16 @@
+{
+  "rules": {
+    "bookings":     { ".read": true, ".write": true, ".indexOn": ["createdAt", "date"] },
+    "packages":     { ".read": true, ".write": true, ".indexOn": ["sortOrder"] },
+    "memberships":  { ".read": true, ".write": true, ".indexOn": ["createdAt"] },
+    "services":     { ".read": true, ".write": true },
+    "blockedDates": { ".read": true, ".write": true },
+    "waivers":      { ".read": true, ".write": true, ".indexOn": ["createdAt", "bookingId"] },
+    "notifications":{ ".read": true, ".write": true },
+    "posts":        { ".read": true, ".write": true, ".indexOn": ["publishDate"] },
+    "events":       { ".read": true, ".write": true, ".indexOn": ["createdAt"] },
+    "promoCodes":   { ".read": true, ".write": true },
+    "presence":     { ".read": true, ".write": true, ".indexOn": ["startedAt"] },
+    "stats":        { ".read": true, ".write": true }
+  }
+}

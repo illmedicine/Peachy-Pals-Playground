@@ -573,10 +573,19 @@
             <div class="form-group"><label>Child's Age *</label><input type="number" id="bkChildAge" min="0" max="12" required></div>
           </div>
           <div class="form-row">
+            <div class="form-group"><label>Birthday Month *</label><select id="bkChildBirthMonth" required><!-- JS populated --></select></div>
+            <div class="form-group"><label>Birthday Year *</label><select id="bkChildBirthYear" required><!-- JS populated --></select></div>
+          </div>
+          <p style="color:var(--gray);font-size:0.8rem;margin-top:-0.5rem;margin-bottom:0.75rem"><i class="fas fa-birthday-cake" style="color:var(--peach)"></i> We use this to send a warm birthday message with a 10% off promo next year.</p>
+          <div class="form-row">
             <div class="form-group"><label>Number of Kids *</label><input type="number" id="bkNumKids" min="1" max="50" required></div>
             <div class="form-group"><label>Number of Adults</label><input type="number" id="bkNumAdults" min="0" max="50" value="0"></div>
           </div>
           <div class="form-group"><label>Special Requests</label><textarea id="bkRequests" rows="3" placeholder="Any special needs, allergies, themes..."></textarea></div>
+          <label class="agreement-checkbox marketing-optin" style="margin-top:0.5rem">
+            <input type="checkbox" id="bkMarketingOptIn" checked>
+            <span><i class="fas fa-gift" style="color:var(--peach)"></i> <strong>Yes, send me exclusive Peachy Pals promotions, birthday discounts, and event updates.</strong> Uncheck to opt out. Unsubscribe anytime.</span>
+          </label>
           <div id="addOnsSection" style="display:none">
             <h3 style="margin:1.5rem 0 0.75rem"><i class="fas fa-plus-circle" style="color:var(--peach)"></i> A La Carte Add-Ons</h3>
             <p style="color:var(--gray);font-size:0.85rem;margin-bottom:0.75rem">Enhance your party with optional extras:</p>
@@ -592,6 +601,15 @@
       <!-- Step 4: Payment -->
       <div class="booking-step" id="bookStep4">
         <h2>Deposit Payment</h2>
+        <div class="promo-code-box" id="promoCodeBox">
+          <label for="bkPromoCode"><i class="fas fa-tag" style="color:var(--peach)"></i> Have a promo code?</label>
+          <div class="promo-code-row">
+            <input type="text" id="bkPromoCode" placeholder="Enter code (e.g. BIRTHDAY10)" oninput="this.value=this.value.toUpperCase()">
+            <button type="button" class="btn btn-outline btn-sm" onclick="applyPromoCode()"><i class="fas fa-check"></i> Apply</button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnClearPromo" onclick="clearPromoCode()" style="display:none"><i class="fas fa-times"></i></button>
+          </div>
+          <p id="promoCodeStatus" class="promo-code-status" style="display:none"></p>
+        </div>
         <div class="payment-summary" id="paymentSummary"><!-- JS --></div>
         <div class="payment-methods">
           <h3><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Deposit with Card</h3>
@@ -669,15 +687,9 @@
 
           <!-- Children covered by this waiver -->
           <h3 style="margin:1.5rem 0 0.5rem"><i class="fas fa-child" style="color:var(--peach)"></i> Children Covered by This Waiver</h3>
+          <p style="color:var(--gray);font-size:0.85rem;margin-bottom:0.75rem">We use each child's birth month &amp; year to send a warm birthday message with a 10% off promo code during their birthday month.</p>
           <div id="waiverChildrenList">
-            <div class="waiver-child-row" data-child-index="0">
-              <div class="form-row">
-                <div class="form-group" style="flex:2"><label>Child's Name *</label><input type="text" class="wv-child-name" required></div>
-                <div class="form-group"><label>Months <small style="color:var(--gray)">(under 1 yr)</small></label><input type="number" class="wv-child-months" min="0" max="11" placeholder="0–11" oninput="exclusiveAge(this,'months')"></div>
-                <div class="age-or">or</div>
-                <div class="form-group"><label>Years <small style="color:var(--gray)">(1–100)</small></label><input type="number" class="wv-child-years" min="1" max="100" placeholder="1–100" oninput="exclusiveAge(this,'years')"></div>
-              </div>
-            </div>
+            <!-- First row is injected by initWaiverView() so the DOB dropdowns always render -->
           </div>
           <button type="button" class="btn btn-outline btn-sm" onclick="addWaiverChild()" style="margin-top:0.5rem"><i class="fas fa-plus"></i> Add Another Child</button>
 
@@ -731,6 +743,10 @@
             <label class="agreement-checkbox">
               <input type="checkbox" id="wvAgreeTerms" onchange="updateWaiverSubmitBtn()">
               <span>I, the undersigned, have read this Waiver, Release, and Assumption of Risk in its entirety. I understand and voluntarily agree to its terms on behalf of myself and all minor children listed above. I acknowledge that by checking this box, I am electronically signing this waiver with the same legal effect as a handwritten signature.</span>
+            </label>
+            <label class="agreement-checkbox marketing-optin" style="margin-top:0.75rem">
+              <input type="checkbox" id="wvMarketingOptIn" checked>
+              <span><i class="fas fa-gift" style="color:var(--peach)"></i> <strong>Yes, I'd like to receive exclusive promotions, birthday discounts, and event updates from Peachy Pals.</strong> Uncheck to opt out. You can unsubscribe anytime from any email.</span>
             </label>
             <div class="form-group" style="margin-top:1rem">
               <label>Type Your Full Legal Name as Signature *</label>
@@ -813,6 +829,8 @@
           <button class="admin-tab" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
           <button class="admin-tab" data-tab="adminEvents" onclick="adminSwitchTab('adminEvents')"><i class="fas fa-star"></i> Events</button>
           <button class="admin-tab" data-tab="adminMembers" onclick="adminSwitchTab('adminMembers')"><i class="fas fa-id-card"></i> Members</button>
+          <button class="admin-tab" data-tab="adminPromos" onclick="adminSwitchTab('adminPromos')"><i class="fas fa-tags"></i> Promo Codes</button>
+          <button class="admin-tab" data-tab="adminBirthdays" onclick="adminSwitchTab('adminBirthdays')"><i class="fas fa-birthday-cake"></i> Birthday Marketing</button>
           <button class="admin-tab" data-tab="adminBlog" onclick="adminSwitchTab('adminBlog')"><i class="fas fa-book-open"></i> Blog</button>
         </div>
 
@@ -891,6 +909,32 @@
             <input type="text" id="memberSearch" placeholder="Search by name, phone, or email..." oninput="filterMembers()" style="width:100%;max-width:400px">
           </div>
           <div id="adminMembersList" class="admin-members-list"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: Promo Codes -->
+        <div class="admin-panel" id="adminPromos">
+          <div class="admin-panel-header">
+            <h2>Promo Codes</h2>
+            <button class="btn btn-primary" onclick="openPromoEditor()"><i class="fas fa-plus"></i> New Promo Code</button>
+          </div>
+          <p style="color:var(--gray);margin-bottom:1rem">Codes can be typed at checkout or applied automatically via <code>?promo=CODE</code> URLs. Birthday emails use auto-generated per-child codes valid only in that child's birthday month.</p>
+          <div id="adminPromosList" class="admin-promos-list"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: Birthday Marketing -->
+        <div class="admin-panel" id="adminBirthdays">
+          <div class="admin-panel-header">
+            <h2>Birthday Marketing</h2>
+          </div>
+          <p style="color:var(--gray);margin-bottom:1rem">Send warm birthday greetings with a 10% off promo code to families whose child has a birthday in the selected month. Only opted-in signees receive an email.</p>
+          <div class="birthday-controls">
+            <div class="form-row" style="align-items:flex-end">
+              <div class="form-group"><label>Birthday Month</label><select id="bdayMonthSel"></select></div>
+              <div class="form-group"><label>&nbsp;</label><button class="btn btn-outline btn-sm" onclick="loadBirthdayCandidates()"><i class="fas fa-sync"></i> Refresh</button></div>
+              <div class="form-group"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="sendBirthdayBlast()"><i class="fas fa-paper-plane"></i> Send Birthday Blast</button></div>
+            </div>
+          </div>
+          <div id="bdayCandidatesList" class="admin-bday-list" style="margin-top:1rem"><!-- JS --></div>
         </div>
 
         <!-- Admin: Blog -->
