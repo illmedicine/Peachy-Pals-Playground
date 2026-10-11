@@ -776,7 +776,7 @@
     <!-- Admin Login -->
     <div id="adminLogin" class="admin-login-wrap">
       <div class="admin-login-box">
-        <h2><i class="fas fa-lock"></i> Administrator Login</h2>
+        <h2><i class="fas fa-lock"></i> Admin &amp; Staff Login</h2>
         <p>Enter your 4-digit access code</p>
         <div class="pin-input-wrap">
           <input type="password" id="adminPin1" maxlength="1" class="pin-input" oninput="pinNext(this,1)" onkeydown="pinBack(event,this,1)">
@@ -794,9 +794,9 @@
     <div id="adminDashboard" style="display:none">
       <section class="admin-header">
         <div class="container admin-header-inner">
-          <h1><i class="fas fa-cog"></i> Admin Dashboard</h1>
+          <h1 id="adminDashTitle"><i class="fas fa-cog"></i> Admin Dashboard</h1>
           <div style="display:flex;align-items:center;gap:0.75rem">
-            <button class="notif-bell" id="notifBell" onclick="toggleNotifPanel()" title="Notifications">
+            <button class="notif-bell admin-only" id="notifBell" onclick="toggleNotifPanel()" title="Notifications">
               <i class="fas fa-bell"></i>
               <span class="notif-badge" id="notifBadge" style="display:none">0</span>
             </button>
@@ -823,15 +823,15 @@
         <!-- Admin Tabs -->
         <div class="admin-tabs">
           <button class="admin-tab active" data-tab="adminBookings" onclick="adminSwitchTab('adminBookings')"><i class="fas fa-calendar-alt"></i> Bookings</button>
-          <button class="admin-tab" data-tab="adminPackages" onclick="adminSwitchTab('adminPackages')"><i class="fas fa-gift"></i> Packages</button>
-          <button class="admin-tab" data-tab="adminServices" onclick="adminSwitchTab('adminServices')"><i class="fas fa-images"></i> Services</button>
+          <button class="admin-tab admin-only" data-tab="adminPackages" onclick="adminSwitchTab('adminPackages')"><i class="fas fa-gift"></i> Packages</button>
+          <button class="admin-tab admin-only" data-tab="adminServices" onclick="adminSwitchTab('adminServices')"><i class="fas fa-images"></i> Services</button>
           <button class="admin-tab" data-tab="adminWaivers" onclick="adminSwitchTab('adminWaivers')"><i class="fas fa-file-signature"></i> Waivers</button>
-          <button class="admin-tab" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
-          <button class="admin-tab" data-tab="adminEvents" onclick="adminSwitchTab('adminEvents')"><i class="fas fa-star"></i> Events</button>
+          <button class="admin-tab admin-only" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
+          <button class="admin-tab admin-only" data-tab="adminEvents" onclick="adminSwitchTab('adminEvents')"><i class="fas fa-star"></i> Events</button>
           <button class="admin-tab" data-tab="adminMembers" onclick="adminSwitchTab('adminMembers')"><i class="fas fa-id-card"></i> Members</button>
-          <button class="admin-tab" data-tab="adminPromos" onclick="adminSwitchTab('adminPromos')"><i class="fas fa-tags"></i> Promo Codes</button>
-          <button class="admin-tab" data-tab="adminBirthdays" onclick="adminSwitchTab('adminBirthdays')"><i class="fas fa-birthday-cake"></i> Birthday Marketing</button>
-          <button class="admin-tab" data-tab="adminBlog" onclick="adminSwitchTab('adminBlog')"><i class="fas fa-book-open"></i> Blog</button>
+          <button class="admin-tab admin-only" data-tab="adminPromos" onclick="adminSwitchTab('adminPromos')"><i class="fas fa-tags"></i> Promo Codes</button>
+          <button class="admin-tab admin-only" data-tab="adminBirthdays" onclick="adminSwitchTab('adminBirthdays')"><i class="fas fa-birthday-cake"></i> Birthday Marketing</button>
+          <button class="admin-tab admin-only" data-tab="adminBlog" onclick="adminSwitchTab('adminBlog')"><i class="fas fa-book-open"></i> Blog</button>
         </div>
 
         <!-- Admin: Bookings -->
@@ -991,7 +991,7 @@
       <!-- Step 1: Plan Selection -->
       <div class="membership-step active" id="memStep1">
         <h2>Choose Your Membership Plan</h2>
-        <p class="membership-intro">Both memberships include unlimited visits for your child. All memberships are billed monthly.</p>
+        <p class="membership-intro">Choose unlimited play or our weekday Preview Club. All memberships are billed monthly.</p>
         <div class="membership-plans">
           <div class="mem-plan-card" id="planMonthly" onclick="selectMembershipPlan('monthly')">
             <div class="mem-plan-badge">Flexible</div>
@@ -1017,6 +1017,18 @@
               <li>Billed monthly for 12 months</li>
             </ul>
             <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); selectMembershipPlan('annual')">Select Annual</button>
+          </div>
+          <div class="mem-plan-card" id="planPreview" onclick="selectMembershipPlan('preview')">
+            <div class="mem-plan-badge">Weekday Fun</div>
+            <h3>Little Pals Preview Club</h3>
+            <div class="mem-plan-price">$29<small>/month per child</small></div>
+            <ul class="mem-plan-features">
+              <li>4 weekday visits per child each month</li>
+              <li>Weekday visits only (Mon–Fri)</li>
+              <li>+$20/month per additional child</li>
+              <li>Visits reset monthly — unused visits don't carry over</li>
+            </ul>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); selectMembershipPlan('preview')">Select Preview Club</button>
           </div>
         </div>
       </div>

@@ -818,6 +818,8 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
 }
 .admin-tab:hover { border-color: var(--peach-light); }
 .admin-tab.active { background: var(--peach); color: #fff; border-color: var(--peach-dark); }
+/* Staff PIN login: view-only Bookings / Waivers / Members */
+.staff-mode .admin-only { display: none !important; }
 .admin-panel { display: none; animation: fadeIn 0.3s ease; }
 .admin-panel.active { display: block; }
 
@@ -1016,8 +1018,8 @@ h1,h2,h3,h4,h5 { font-family: var(--font-heading); line-height: 1.2; }
 
 .membership-plans {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
   margin-top: 1.5rem;
 }
 .mem-plan-card {

@@ -7,6 +7,10 @@
 // ==========================================
 const CONFIG = {
   adminCode: '4931',
+  // Staff PINs — view-only access to Bookings, Waivers and Members. Code → staff name.
+  staffCodes: {
+    '0007': 'Staff'
+  },
   depositPercent: 50,
   taxRate: 0.07,        // Georgia state (4%) + Bartow County local (3%)
   partyDuration: 2,
@@ -55,6 +59,8 @@ let adminCalYear = new Date().getFullYear();
 let blockedDates = [];
 let allBookings = [];
 let isAdminLoggedIn = false;
+let adminRole = null;            // 'admin' | 'staff' while logged in
+const STAFF_TABS = ['adminBookings', 'adminWaivers', 'adminMembers'];
 let selectedMembershipPlan = null;
 let dateBookings = [];
 let appliedPromo = null;         // { id, code, percentOff, description }
@@ -219,7 +225,7 @@ function renderFallbackServices() {
   const fallback = [
     { title: "Open Play", price: "$12", priceNote: "/ 2 hours", description: "Flexible playtime in our indoor play space. $18 for unlimited play. Adults free. Grippy socks required.", imageUrl: "https://images.unsplash.com/photo-1566140967404-b8b3932483f5?w=600&h=300&fit=crop&auto=format" },
     { title: "Birthday Parties", price: "From $229", description: "Private party room, dedicated playtime, staff support & full cleanup.", imageUrl: "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&h=300&fit=crop&auto=format", featured: true, buttonText: "View Packages", buttonAction: "navigate('packages')" },
-    { title: "Memberships", price: "From $55", priceNote: "/mo", description: "Unlimited visits! Monthly: $65/child. Annual: $55/child. +$20/mo per additional sibling.", imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format", buttonText: "View Memberships", buttonAction: "navigate('memberships')" },
+    { title: "Memberships", price: "From $29", priceNote: "/mo", description: "Unlimited visits from $55/child, or 4 weekday visits with the Little Pals Preview Club for $29/child. +$20/mo per additional child.", imageUrl: "https://images.unsplash.com/photo-1587654780291-39c9404d7dd0?w=600&h=300&fit=crop&auto=format", buttonText: "View Memberships", buttonAction: "navigate('memberships')" },
     { title: "Field Trips", description: "Schools, daycares, camps & homeschool groups welcome for structured group play.", imageUrl: "https://images.unsplash.com/photo-1472162072942-cd5147eb3902?w=600&h=300&fit=crop&auto=format", buttonText: "Inquire Now", buttonAction: "mailto:info@kdconcierge.com" },
     { title: "Balloon Bar", price: "From $3", description: "Helium fill-up $3–$5. Mini bundles from $15. Custom bouquets from $35. Characters from $10.", imageUrl: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=600&h=300&fit=crop&auto=format" },
     { title: "Digital Waiver", description: "Complete once, play all year! Fast, easy, and good for 12 months.", imageUrl: "https://images.unsplash.com/photo-1596461404969-9ae70f2830c1?w=600&h=300&fit=crop&auto=format", buttonText: "Sign Waiver", buttonAction: "navigate('waiver')" }
@@ -1061,6 +1067,7 @@ function renderBookingCard(b, isAdmin) {
           <div id="squarePay_${b.id}"></div>
         </div>
       ` : ''}
+      ${isAdmin && isStaff() ? '' : `
       <div class="booking-actions">
         ${b.status !== 'cancelled' ? `
           <button class="btn btn-outline btn-sm" onclick="editBooking('${b.id}', ${isAdmin})"><i class="fas fa-edit"></i> Edit</button>
@@ -1071,12 +1078,13 @@ function renderBookingCard(b, isAdmin) {
           ${!b.depositPaid ? `<button class="btn btn-primary btn-sm" onclick="markDepositPaid('${b.id}')"><i class="fas fa-dollar-sign"></i> Mark Paid</button>` : ''}
           <button class="btn btn-danger btn-sm" onclick="deleteBookingAdmin('${b.id}')"><i class="fas fa-trash"></i> Delete</button>
         ` : ''}
-      </div>
+      </div>`}
     </div>
   `;
 }
 
 async function editBooking(bookingId, isAdmin) {
+  if (isAdmin && staffBlocked()) return;
   let bookings;
   if (isAdmin) {
     bookings = allBookings;
@@ -1122,6 +1130,7 @@ async function editBooking(bookingId, isAdmin) {
 }
 
 async function saveBookingEdit(bookingId, isAdmin) {
+  if (isAdmin && staffBlocked()) return;
   const data = {
     date: document.getElementById('editDate').value,
     timeSlot: document.getElementById('editTime').value,
@@ -1152,6 +1161,7 @@ function cancelEdit(isAdmin) {
 }
 
 async function cancelBooking(bookingId, isAdmin) {
+  if (isAdmin && staffBlocked()) return;
   if (!confirm('Are you sure you want to cancel this booking?')) return;
   try {
     await DataStore.updateBooking(bookingId, { status: 'cancelled' });
@@ -1189,15 +1199,24 @@ function pinBack(e, el, idx) {
 
 function adminLogin() {
   const code = ['adminPin1', 'adminPin2', 'adminPin3', 'adminPin4'].map(id => document.getElementById(id).value).join('');
-  if (code === CONFIG.adminCode) {
+  const staffName = CONFIG.staffCodes[code];
+  if (code === CONFIG.adminCode || staffName) {
     isAdminLoggedIn = true;
+    adminRole = staffName ? 'staff' : 'admin';
     document.getElementById('adminLogin').style.display = 'none';
-    document.getElementById('adminDashboard').style.display = 'block';
-    loadAdminBookings();
-    loadAdminPackages();
-    loadAdminNotifications();
-    loadAdminEvents();
-    showToast('Welcome, Admin!', 'success');
+    const dash = document.getElementById('adminDashboard');
+    dash.style.display = 'block';
+    dash.classList.toggle('staff-mode', isStaff());
+    document.getElementById('adminDashTitle').innerHTML = isStaff()
+      ? '<i class="fas fa-user"></i> Staff Portal'
+      : '<i class="fas fa-cog"></i> Admin Dashboard';
+    adminSwitchTab('adminBookings');
+    if (!isStaff()) {
+      loadAdminPackages();
+      loadAdminNotifications();
+      loadAdminEvents();
+    }
+    showToast(`Welcome, ${staffName || 'Admin'}!`, 'success');
   } else {
     document.getElementById('adminError').style.display = 'block';
     ['adminPin1', 'adminPin2', 'adminPin3', 'adminPin4'].forEach(id => document.getElementById(id).value = '');
@@ -1207,11 +1226,25 @@ function adminLogin() {
 
 function adminLogout() {
   isAdminLoggedIn = false;
+  adminRole = null;
+  document.getElementById('adminDashboard').classList.remove('staff-mode');
   navigate('home');
   showToast('Logged out', 'info');
 }
 
+function isStaff() {
+  return adminRole === 'staff';
+}
+
+// Staff are view-only; call at the top of any admin write action.
+function staffBlocked() {
+  if (!isStaff()) return false;
+  showToast('Staff access is view-only.', 'error');
+  return true;
+}
+
 function adminSwitchTab(tabId) {
+  if (isStaff() && !STAFF_TABS.includes(tabId)) return;
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
   document.querySelectorAll('.admin-panel').forEach(p => p.classList.toggle('active', p.id === tabId));
   if (tabId === 'adminBookings') loadAdminBookings();
@@ -1242,7 +1275,7 @@ async function loadAdminBookings() {
     <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">Total Bookings</div></div>
     <div class="stat-card"><div class="stat-num">${pending}</div><div class="stat-label">Pending</div></div>
     <div class="stat-card"><div class="stat-num">${confirmed}</div><div class="stat-label">Confirmed</div></div>
-    <div class="stat-card"><div class="stat-num">$${revenue}</div><div class="stat-label">Deposits Collected</div></div>
+    ${isStaff() ? '' : `<div class="stat-card"><div class="stat-num">$${revenue}</div><div class="stat-label">Deposits Collected</div></div>`}
   `;
 
   const list = document.getElementById('adminBookingsList');
@@ -1254,18 +1287,21 @@ async function loadAdminBookings() {
 }
 
 async function confirmBookingAdmin(id) {
+  if (staffBlocked()) return;
   await DataStore.updateBooking(id, { status: 'confirmed' });
   showToast('Booking confirmed!', 'success');
   loadAdminBookings();
 }
 
 async function markDepositPaid(id) {
+  if (staffBlocked()) return;
   await DataStore.updateBooking(id, { depositPaid: true });
   showToast('Deposit marked as paid', 'success');
   loadAdminBookings();
 }
 
 async function deleteBookingAdmin(id) {
+  if (staffBlocked()) return;
   if (!confirm('Permanently delete this booking?')) return;
   await DataStore.deleteBooking(id);
   showToast('Booking deleted', 'info');
@@ -1734,8 +1770,26 @@ const MEMBERSHIP_PLANS = {
     siblingFee: 20,
     commitment: '12 months',
     cancellable: false
+  },
+  preview: {
+    name: 'Little Pals Preview Club',
+    pricePerChild: 29,
+    siblingFee: 20,
+    commitment: 'month-to-month',
+    cancellable: true,
+    visitsPerMonth: 4,     // per child; resets monthly, no rollover
+    weekdayOnly: true      // Monday–Friday visits only
   }
 };
+
+const MEMBERSHIP_PLAN_CARD_IDS = { monthly: 'planMonthly', annual: 'planAnnual', preview: 'planPreview' };
+
+// Benefits wording shared by summary, agreement and confirmation
+function membershipVisitsText(plan) {
+  return plan.visitsPerMonth
+    ? `${plan.visitsPerMonth} ${plan.weekdayOnly ? 'weekday ' : ''}visits per child each month`
+    : 'Unlimited visits';
+}
 
 function initMembershipView() {
   selectedMembershipPlan = null;
@@ -1746,7 +1800,7 @@ function initMembershipView() {
 function selectMembershipPlan(planType) {
   selectedMembershipPlan = planType;
   document.querySelectorAll('.mem-plan-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById(planType === 'monthly' ? 'planMonthly' : 'planAnnual').classList.add('selected');
+  document.getElementById(MEMBERSHIP_PLAN_CARD_IDS[planType]).classList.add('selected');
   setTimeout(() => membershipStep(2), 300);
 }
 
@@ -1853,6 +1907,7 @@ function renderMembershipAgreement() {
     <h3>Membership Summary</h3>
     <table class="mem-summary-table">
       <tr><td><strong>Plan:</strong></td><td>${plan.name}</td></tr>
+      <tr><td><strong>Visits:</strong></td><td>${membershipVisitsText(plan)}</td></tr>
       <tr><td><strong>Member:</strong></td><td>${escapeHtml(document.getElementById('memFirstName').value)} ${escapeHtml(document.getElementById('memLastName').value)}</td></tr>
       <tr><td><strong>Phone:</strong></td><td>${escapeHtml(document.getElementById('memPhone').value)}</td></tr>
       <tr><td><strong>Email:</strong></td><td>${escapeHtml(document.getElementById('memEmail').value)}</td></tr>
@@ -1893,19 +1948,25 @@ function renderMembershipAgreement() {
     `;
   } else {
     agreementHtml = `
-      <h3>Monthly Membership Terms</h3>
+      <h3>${plan.name} Terms</h3>
       <div class="legal-text">
         <p><strong>MEMBERSHIP TERMS — PLEASE READ BEFORE CONTINUING</strong></p>
 
-        <p><strong>1. MONTH-TO-MONTH MEMBERSHIP.</strong> By selecting the Monthly Membership plan, you ("Member") are enrolling in a month-to-month membership with Peachy Pals Playland ("Facility"), located at 801 West Ave Suite 201, Cartersville, Georgia 30120.</p>
+        <p><strong>1. MONTH-TO-MONTH MEMBERSHIP.</strong> By selecting the ${plan.name} plan, you ("Member") are enrolling in a month-to-month membership with Peachy Pals Playland ("Facility"), located at 801 West Ave Suite 201, Cartersville, Georgia 30120.</p>
 
         <p><strong>2. MONTHLY BILLING.</strong> Member agrees to pay <strong>$${plan.pricePerChild} per month</strong> for the primary child${siblings > 0 ? ` and an additional <strong>$${plan.siblingFee} per month for each additional sibling (${siblings} sibling${siblings > 1 ? 's' : ''} = $${siblings * plan.siblingFee}/month)</strong>` : ''}, for a total recurring monthly charge of <strong>$${monthlyTotal}</strong>. This amount will be charged to the payment method provided on file each month.</p>
 
         <p><strong>3. CANCELLATION.</strong> This month-to-month membership may be cancelled at any time with thirty (30) days' written notice. Member is responsible for any charges incurred up to the effective date of cancellation.</p>
 
-        <p><strong>4. MEMBERSHIP BENEFITS.</strong> During the term of this membership, all enrolled children shall have unlimited access to open play sessions during regular business hours, subject to the Facility's standard rules, capacity limitations, and operational schedule.</p>
+        ${plan.visitsPerMonth ? `
+        <p><strong>4. MEMBERSHIP BENEFITS.</strong> During the term of this membership, each enrolled child is entitled to <strong>${plan.visitsPerMonth} open play visits per calendar month</strong>${plan.weekdayOnly ? ', valid on <strong>weekdays (Monday through Friday) only</strong>' : ''}, during regular business hours, subject to the Facility's standard rules, capacity limitations, and operational schedule. Visits are not valid during private events or exclusive facility rentals.</p>
 
-        <p><strong>5. WAIVER AND RELEASE.</strong> Member acknowledges that all children must have a valid signed waiver on file with the Facility before participating in any play activities.</p>
+        <p><strong>5. VISIT RESET.</strong> Membership visits reset at the start of each month. <strong>Unused visits do not carry over</strong> to the following month.</p>
+        ` : `
+        <p><strong>4. MEMBERSHIP BENEFITS.</strong> During the term of this membership, all enrolled children shall have unlimited access to open play sessions during regular business hours, subject to the Facility's standard rules, capacity limitations, and operational schedule.</p>
+        `}
+
+        <p><strong>${plan.visitsPerMonth ? 6 : 5}. WAIVER AND RELEASE.</strong> Member acknowledges that all children must have a valid signed waiver on file with the Facility before participating in any play activities.</p>
 
         <p><strong>BY CHECKING THE BOX BELOW, YOU ACKNOWLEDGE THAT YOU HAVE READ, UNDERSTOOD, AND AGREE TO THE MEMBERSHIP TERMS ABOVE, INCLUDING THE RECURRING MONTHLY CHARGE OF $${monthlyTotal}.</strong></p>
       </div>
@@ -1972,6 +2033,8 @@ async function submitMembership() {
     pricePerChild: plan.pricePerChild,
     siblingFee: plan.siblingFee,
     commitment: plan.commitment,
+    visitsPerMonth: plan.visitsPerMonth || null,
+    weekdayOnly: !!plan.weekdayOnly,
     totalTermCost: selectedMembershipPlan === 'annual' ? monthlyTotal * 12 : null,
     paymentMethod: 'square',
     agreedToTerms: true,
@@ -1993,6 +2056,7 @@ async function submitMembership() {
       <div class="confirmation-code">${result.membershipCode}</div>
       <div style="text-align:left;margin:1.5rem 0;padding:1rem;background:var(--cream);border-radius:var(--radius)">
         <p><strong>Plan:</strong> ${plan.name}</p>
+        <p><strong>Visits:</strong> ${membershipVisitsText(plan)}</p>
         <p><strong>Member:</strong> ${escapeHtml(membership.firstName)} ${escapeHtml(membership.lastName)}</p>
         <p><strong>Children:</strong> ${childrenHtml}</p>
         <p><strong>Monthly Charge:</strong> $${monthlyTotal}/month</p>
@@ -2490,14 +2554,16 @@ function renderWaiverCard(w) {
         ${w.email ? `<p><i class="fas fa-envelope" style="width:16px;color:var(--gray)"></i> ${escapeHtml(w.email)}</p>` : ''}
         <p><i class="fas fa-signature" style="width:16px;color:var(--gray)"></i> Signature: <em style="font-family:cursive">${escapeHtml(w.signature || '')}</em></p>
       </div>
+      ${isStaff() ? '' : `
       <div class="waiver-card-actions">
         <button class="btn btn-danger btn-sm" onclick="deleteWaiverAdmin('${w.id}')"><i class="fas fa-trash"></i> Delete</button>
-      </div>
+      </div>`}
     </div>
   `;
 }
 
 async function deleteWaiverAdmin(id) {
+  if (staffBlocked()) return;
   if (!confirm('Permanently delete this waiver record?')) return;
   await DataStore.deleteWaiver(id);
   showToast('Waiver deleted', 'info');
@@ -3762,18 +3828,21 @@ function renderMembersList(members) {
           <dt>Email:</dt><dd><a href="mailto:${escapeHtml(m.email || '')}" style="color:var(--teal-dark)">${escapeHtml(m.email || 'N/A')}</a></dd>
           ${children ? `<dt>Children:</dt><dd>${children}</dd>` : ''}
           ${m.numberOfSiblings ? `<dt>Siblings:</dt><dd>${m.numberOfSiblings}</dd>` : ''}
-          ${m.monthlyTotal ? `<dt>Monthly:</dt><dd>$${m.monthlyTotal}/mo</dd>` : ''}
+          ${(m.monthlyRate || m.monthlyTotal) ? `<dt>Monthly:</dt><dd>$${m.monthlyRate || m.monthlyTotal}/mo</dd>` : ''}
+          ${m.visitsPerMonth ? `<dt>Visits:</dt><dd>${m.visitsPerMonth}/child per month${m.weekdayOnly ? ' (weekdays only)' : ''}</dd>` : ''}
         </dl>
+        ${isStaff() ? '' : `
         <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn btn-success btn-sm" onclick="setMemberStatus('${m.id}','active')">✓ Active</button>
           <button class="btn btn-outline btn-sm" onclick="setMemberStatus('${m.id}','pending')">Pending</button>
           <button class="btn btn-danger btn-sm" onclick="setMemberStatus('${m.id}','cancelled')">Cancel</button>
-        </div>
+        </div>`}
       </div>`;
   }).join('');
 }
 
 async function setMemberStatus(id, status) {
+  if (staffBlocked()) return;
   await DataStore.updateMembership(id, { status });
   showToast('Member status updated', 'success');
   loadAdminMembers();
