@@ -2037,7 +2037,7 @@ input:disabled {
    ========================================== */
 .events-page-header {
   background: linear-gradient(135deg, #7c3aed 0%, var(--peach) 100%);
-  color: #fff; text-align: center; padding: 3.5rem 1.5rem 2.5rem;
+  color: #fff; text-align: center; padding: calc(var(--nav-height) + 2.5rem) 1.5rem 2.5rem;
 }
 .events-page-header h1 { font-size: 2.5rem; margin-bottom: 0.5rem; }
 .events-page-header p  { font-size: 1.05rem; opacity: 0.9; }
@@ -2280,3 +2280,278 @@ input:disabled {
   .admin-table { display: block; overflow-x: auto; white-space: nowrap; }
   .promo-code-row input[type="text"] { min-width: 140px; }
 }
+
+/* ==========================================
+   SHARED STATUS PILLS (promos + events)
+   ========================================== */
+.live-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--bamboo); margin-right: 0.35rem; vertical-align: middle;
+  box-shadow: 0 0 0 0 rgba(102,187,106,0.6); animation: livePulse 1.8s infinite;
+}
+@keyframes livePulse {
+  0% { box-shadow: 0 0 0 0 rgba(102,187,106,0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(102,187,106,0); }
+  100% { box-shadow: 0 0 0 0 rgba(102,187,106,0); }
+}
+.status-pill, .event-status {
+  display: inline-flex; align-items: center; gap: 0.1rem;
+  padding: 0.2rem 0.65rem; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 800; letter-spacing: 0.02em; white-space: nowrap;
+}
+.status-active, .event-status-live { background: rgba(102,187,106,0.18); color: var(--bamboo-dark); }
+.status-scheduled, .event-status-upcoming { background: rgba(38,166,154,0.15); color: var(--teal-dark); }
+.status-offmonth { background: var(--peach-lighter); color: var(--peach-dark); }
+.status-maxed { background: var(--pink-light); color: #ad1457; }
+.status-disabled { background: var(--gray-lighter); color: var(--gray); }
+.status-expired, .event-status-ended { background: var(--gray-light); color: var(--dark2); }
+.admin-table .pill-bamboo { background: rgba(102,187,106,0.18); color: var(--bamboo-dark); }
+
+/* ==========================================
+   PUBLIC DEALS BANNER
+   ========================================== */
+.promo-banner {
+  position: fixed; top: var(--nav-height); left: 0; right: 0; z-index: 999;
+  background: linear-gradient(90deg, var(--bamboo-dark) 0%, #388E3C 45%, var(--teal-dark) 100%);
+  color: #fff; box-shadow: 0 4px 16px rgba(46,125,50,0.25);
+  animation: promoSlideIn 0.45s ease;
+}
+.promo-banner[hidden] { display: none; }
+/* Bamboo stalk with nodes along the bottom edge */
+.promo-banner::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
+  background: repeating-linear-gradient(90deg, var(--bamboo-light) 0 54px, var(--bamboo-dark) 54px 58px);
+}
+@keyframes promoSlideIn { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.promo-banner-inner {
+  max-width: 1300px; margin: 0 auto; padding: 0.55rem 1.25rem 0.7rem;
+  display: flex; align-items: center; gap: 0.85rem;
+}
+.promo-banner-panda {
+  flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%;
+  background: #fff; display: grid; place-items: center; font-size: 1.4rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15); animation: pandaBob 3s ease-in-out infinite;
+}
+@keyframes pandaBob { 0%,100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-2px) rotate(4deg); } }
+.promo-banner-text {
+  flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0.35rem 0.75rem; font-size: 0.92rem;
+}
+.promo-banner-text strong { font-family: var(--font-heading); font-size: 1.1rem; font-weight: 400; letter-spacing: 0.01em; }
+.promo-banner-tag {
+  background: var(--peach); color: #fff; font-weight: 900; font-size: 0.78rem;
+  padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.05em;
+}
+.promo-banner-code {
+  font-family: 'Courier New', monospace; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.08em;
+  color: #fff; background: rgba(255,255,255,0.14); border: 1.5px dashed rgba(255,255,255,0.8);
+  border-radius: 8px; padding: 0.15rem 0.55rem; cursor: pointer; transition: var(--transition);
+}
+.promo-banner-code:hover { background: rgba(255,255,255,0.28); }
+.promo-banner-code i { font-size: 0.75rem; opacity: 0.85; }
+.promo-banner-ends { font-size: 0.82rem; opacity: 0.9; }
+.promo-banner-actions { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.promo-banner-cta {
+  background: var(--peach); color: #fff; border: none; border-radius: 999px;
+  padding: 0.5rem 1.1rem; font-weight: 800; font-size: 0.88rem; font-family: var(--font-body);
+  cursor: pointer; box-shadow: 0 3px 10px rgba(230,74,25,0.35); transition: var(--transition);
+}
+.promo-banner-cta:hover { background: var(--peach-dark); transform: translateY(-1px); }
+.promo-banner-all {
+  background: rgba(255,255,255,0.15); color: #fff; border: 1.5px solid rgba(255,255,255,0.55);
+  border-radius: 999px; padding: 0.42rem 0.85rem; font-weight: 700; font-size: 0.82rem;
+  font-family: var(--font-body); cursor: pointer; transition: var(--transition);
+}
+.promo-banner-all:hover { background: rgba(255,255,255,0.28); }
+.promo-banner-close {
+  background: none; border: none; color: #fff; font-size: 1.5rem; line-height: 1;
+  cursor: pointer; opacity: 0.8; padding: 0 0.25rem;
+}
+.promo-banner-close:hover { opacity: 1; }
+.promo-banner-dots { position: absolute; left: 50%; bottom: 7px; transform: translateX(-50%); display: flex; gap: 4px; }
+.promo-banner-dots span { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,0.4); }
+.promo-banner-dots span.on { background: #fff; }
+
+body.promo-banner-on .view { margin-top: var(--promo-h, 0px); }
+body.promo-banner-on #toast-container { top: calc(var(--nav-height) + var(--promo-h, 0px) + 1rem); }
+
+.promo-banner-cta i { margin-left: 0.4rem; }
+
+@media (max-width: 760px) {
+  /* Two rows: [panda + headline] then [tag, code, buttons] */
+  .promo-banner-inner { padding: 0.4rem 1.8rem 0.65rem 0.6rem; gap: 0.35rem 0.4rem; flex-wrap: wrap; }
+  .promo-banner-text { display: contents; font-size: 0.8rem; }
+  .promo-banner-panda { width: 26px; height: 26px; font-size: 0.95rem; }
+  .promo-banner-code i { display: none; }
+  .promo-banner-text strong {
+    order: 1; flex: 1 1 calc(100% - 40px); min-width: 0; font-size: 1rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .promo-banner-tag { order: 2; }
+  .promo-banner-code-wrap { order: 3; }
+  .promo-banner-actions { order: 4; margin-left: auto; }
+  .promo-code-label, .promo-banner-ends, .promo-banner-cta i { display: none; }
+  .promo-banner-tag { font-size: 0.68rem; padding: 0.1rem 0.45rem; }
+  .promo-banner-code { font-size: 0.78rem; padding: 0.05rem 0.4rem; letter-spacing: 0.04em; }
+  .promo-banner-actions { gap: 0.3rem; }
+  .promo-banner-cta { padding: 0.4rem 0.7rem; font-size: 0.78rem; white-space: nowrap; }
+  .promo-banner-all { padding: 0.35rem 0.55rem; font-size: 0.75rem; }
+  .promo-banner-all span { display: none; }
+  .promo-banner-close { position: absolute; top: 50%; right: 0.35rem; transform: translateY(-55%); font-size: 1.35rem; }
+}
+
+/* Deal notification popup */
+.activity-popup.ap-deal {
+  border-left-color: var(--bamboo); cursor: pointer;
+  background: linear-gradient(135deg, #fff 0%, #F1F8E9 100%);
+}
+.activity-popup.ap-deal:hover { box-shadow: 0 6px 24px rgba(46,125,50,0.25); }
+.ap-link { color: var(--bamboo-dark); font-weight: 800; }
+
+/* Deals modal */
+.deals-modal-header {
+  display: flex; align-items: center; gap: 1rem; margin: -0.5rem 0 1.25rem;
+  padding-bottom: 1rem; border-bottom: 4px solid transparent;
+  border-image: repeating-linear-gradient(90deg, var(--bamboo) 0 46px, var(--bamboo-dark) 46px 50px) 4;
+}
+.deals-panda {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 2rem; background: #F1F8E9; border: 3px solid var(--bamboo-light); flex-shrink: 0;
+}
+.deals-modal-header h2 { color: var(--bamboo-dark); font-size: 1.8rem; }
+.deals-modal-header p { color: var(--gray); font-size: 0.9rem; margin-top: 0.15rem; }
+.deals-list { display: flex; flex-direction: column; gap: 0.85rem; }
+.deal-card {
+  display: flex; gap: 1rem; align-items: stretch; background: var(--white);
+  border: 2px solid var(--bamboo-light); border-radius: var(--radius); overflow: hidden;
+  transition: var(--transition);
+}
+.deal-card:hover { border-color: var(--bamboo); box-shadow: 0 6px 20px rgba(46,125,50,0.15); transform: translateY(-2px); }
+.deal-pct {
+  flex-shrink: 0; width: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: linear-gradient(160deg, var(--peach) 0%, var(--peach-dark) 100%); color: #fff;
+}
+.deal-pct span { font-family: var(--font-heading); font-size: 2rem; line-height: 1; }
+.deal-pct small { font-weight: 900; letter-spacing: 0.12em; font-size: 0.72rem; }
+.deal-body { flex: 1; padding: 0.85rem 1rem 0.85rem 0; min-width: 0; }
+.deal-body strong { font-size: 1.05rem; color: var(--dark); display: block; }
+.deal-meta { font-size: 0.82rem; color: var(--gray); margin: 0.25rem 0 0.6rem; }
+.deal-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.deal-code {
+  font-family: 'Courier New', monospace; font-weight: 700; letter-spacing: 0.08em; font-size: 0.95rem;
+  color: var(--bamboo-dark); background: #F1F8E9; border: 2px dashed var(--bamboo);
+  border-radius: 10px; padding: 0.35rem 0.75rem; cursor: pointer;
+}
+.deal-code:hover { background: #DCEDC8; }
+
+/* Checkout deal chips */
+.deal-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.6rem; }
+.deal-chips:empty { display: none; }
+.deal-chips-label { font-size: 0.82rem; font-weight: 700; color: var(--bamboo-dark); margin-right: 0.15rem; }
+.deal-chip {
+  font-family: var(--font-body); font-size: 0.8rem; font-weight: 800;
+  border: 1.5px dashed var(--bamboo); background: #F1F8E9; color: var(--bamboo-dark);
+  border-radius: 999px; padding: 0.25rem 0.75rem; cursor: pointer; transition: var(--transition);
+}
+.deal-chip:hover { background: #DCEDC8; }
+.deal-chip.applied { background: var(--bamboo); color: #fff; border-style: solid; }
+
+/* ==========================================
+   ADMIN: PROMO + EVENT SCHEDULING UI
+   ========================================== */
+.promo-admin-summary {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  gap: 0.75rem; margin-bottom: 1rem;
+}
+.promo-live-count {
+  font-weight: 800; color: var(--bamboo-dark); background: #F1F8E9;
+  border: 1.5px solid var(--bamboo-light); border-radius: 999px; padding: 0.35rem 0.9rem; font-size: 0.88rem;
+}
+.promo-filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.promo-filter-chips button {
+  font-family: var(--font-body); font-weight: 700; font-size: 0.82rem; cursor: pointer;
+  background: var(--white); color: var(--dark2); border: 1.5px solid var(--gray-light);
+  border-radius: 999px; padding: 0.3rem 0.8rem; transition: var(--transition);
+}
+.promo-filter-chips button span {
+  display: inline-block; min-width: 1.3rem; margin-left: 0.2rem; padding: 0 0.3rem;
+  background: var(--gray-lighter); border-radius: 999px; font-size: 0.72rem;
+}
+.promo-filter-chips button:hover { border-color: var(--bamboo); }
+.promo-filter-chips button.active { background: var(--bamboo); border-color: var(--bamboo); color: #fff; }
+.promo-filter-chips button.active span { background: rgba(255,255,255,0.25); }
+
+.promo-schedule-box {
+  background: #F1F8E9; border: 1.5px solid var(--bamboo-light); border-left: 5px solid var(--bamboo);
+  border-radius: 12px; padding: 0.9rem 1rem 0.75rem; margin: 0.5rem 0 1rem;
+}
+.promo-schedule-box h4 { color: var(--bamboo-dark); font-size: 1.05rem; margin-bottom: 0.6rem; }
+.promo-schedule-box label small { color: var(--gray); font-weight: 600; }
+.promo-quick-dates { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; font-size: 0.8rem; color: var(--gray); }
+.promo-quick-dates button {
+  font-family: var(--font-body); font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  background: var(--white); color: var(--bamboo-dark); border: 1.5px solid var(--bamboo-light);
+  border-radius: 999px; padding: 0.2rem 0.65rem;
+}
+.promo-quick-dates button:hover { border-color: var(--bamboo); background: #DCEDC8; }
+.promo-schedule-preview {
+  margin: 0.65rem 0 0; padding: 0.5rem 0.75rem; border-radius: 8px;
+  background: var(--white); font-size: 0.86rem; color: var(--dark2); line-height: 1.45;
+}
+.promo-schedule-preview.warn { background: #FFEBEE; color: #c62828; }
+.promo-onsite-box {
+  border: 1.5px dashed var(--bamboo); border-radius: 12px; padding: 0.85rem 1rem; margin-top: 0.5rem;
+  background: linear-gradient(135deg, #fff 0%, #F1F8E9 100%);
+}
+.promo-onsite-box.disabled { opacity: 0.6; border-color: var(--gray-light); }
+
+.admin-event-summary { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.25rem; }
+.admin-event-card .event-status { margin-bottom: 0.35rem; }
+.admin-event-card.is-ended { background: var(--gray-lighter); }
+.admin-event-card.is-ended .admin-event-img { filter: grayscale(0.85); opacity: 0.7; }
+.admin-event-img.no-img { font-size: 2.2rem; background: linear-gradient(160deg, #F1F8E9, var(--bamboo-light)); }
+
+/* ==========================================
+   PUBLIC EVENTS LIST
+   ========================================== */
+.events-list-section { max-width: 960px; margin: 3rem auto 0; }
+.events-list-heading {
+  text-align: center; font-size: 2rem; color: var(--bamboo-dark); margin-bottom: 1.5rem;
+}
+.events-list-heading::after {
+  content: ''; display: block; width: 120px; height: 5px; margin: 0.6rem auto 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--bamboo) 0 26px, var(--bamboo-dark) 26px 30px);
+}
+.events-group { margin-bottom: 2rem; }
+.events-group-title { font-size: 1.3rem; color: var(--dark2); margin-bottom: 0.85rem; display: flex; align-items: center; gap: 0.4rem; }
+.events-group-title span {
+  font-family: var(--font-body); font-size: 0.75rem; font-weight: 800;
+  background: var(--gray-lighter); color: var(--gray); border-radius: 999px; padding: 0.1rem 0.55rem;
+}
+.event-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.event-card {
+  background: var(--white); border-radius: var(--radius); overflow: hidden;
+  box-shadow: var(--shadow); border: 2px solid transparent; transition: var(--transition);
+  display: flex; flex-direction: column;
+}
+.event-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.event-card.event-live { border-color: var(--bamboo); }
+.event-card-img { height: 150px; background-size: cover; background-position: center; background-color: var(--cream2); }
+.event-card-img.no-img {
+  display: grid; place-items: center; font-size: 3rem;
+  background: linear-gradient(160deg, #F1F8E9 0%, var(--bamboo-light) 100%);
+}
+.event-card-body { padding: 0.9rem 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.event-card-body .event-status { align-self: flex-start; }
+.event-card-body h3 { font-size: 1.25rem; color: var(--dark); }
+.event-when { font-size: 0.85rem; color: var(--gray); font-weight: 600; }
+.event-desc { font-size: 0.9rem; color: var(--dark2); line-height: 1.5; }
+.events-group-past .event-card { box-shadow: none; border: 1.5px solid var(--gray-light); background: var(--gray-lighter); }
+.events-group-past .event-card:hover { transform: none; }
+.events-group-past .event-card-img { filter: grayscale(0.9); opacity: 0.65; height: 110px; }
+.events-group-past .event-card-body h3 { color: var(--gray); }
+.events-none-upcoming {
+  text-align: center; color: var(--gray); background: var(--white); border-radius: var(--radius);
+  padding: 1.25rem; margin-bottom: 2rem; border: 2px dashed var(--bamboo-light);
+}
+.ec-popup-event.ended { background: var(--gray-lighter); opacity: 0.8; }

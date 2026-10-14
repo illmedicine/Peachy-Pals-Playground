@@ -99,6 +99,9 @@ function handleRoute() {
   if (view === 'post') loadCurrentPost();
   if (view === 'events') initEventsCalendar();
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
+
+  // Deals banner is hidden inside the admin dashboard
+  renderPromoBanner();
 }
 
 function scrollToId(id) {
@@ -504,7 +507,8 @@ function computeBookingTotals() {
   return { pkg, basePrice, numKids, extraKids, extraFee, selectedAddOns, addOnsTotal, preDiscountSubtotal, discount, subtotal, tax, total, deposit };
 }
 
-function renderPaymentSummary() {
+// initCard=false re-renders totals only — attaching Square twice would duplicate the card fields
+function renderPaymentSummary(initCard = true) {
   // If URL brought a promo, try to apply it (once) before rendering totals
   if (pendingUrlPromoCode && !appliedPromo) {
     const input = document.getElementById('bkPromoCode');
@@ -545,31 +549,37 @@ function renderPaymentSummary() {
     </table>
   `;
 
-  initSquareCardForm('squareCardBooking');
+  renderCheckoutDealChips();
+  if (initCard) initSquareCardForm('squareCardBooking');
 }
 
 // ---- Promo code helpers ----
-function isPromoCurrentlyValid(promo, forDate = null) {
-  if (!promo || promo.active === false) return { ok: false, reason: 'This promo code is not active.' };
-  const now = new Date();
-  const check = forDate ? new Date(forDate) : now;
-  if (promo.validMonth) {
-    // 1–12 — must match booking's birthday month OR current calendar month if no forDate
-    const m = check.getMonth() + 1;
-    if (parseInt(promo.validMonth) !== m) {
-      return { ok: false, reason: `This code is only valid for ${MONTH_NAMES[promo.validMonth - 1]}.` };
-    }
-  }
-  if (promo.startDate && new Date(promo.startDate) > now) {
-    return { ok: false, reason: 'This code is not active yet.' };
-  }
-  if (promo.endDate && new Date(promo.endDate) < now) {
-    return { ok: false, reason: 'This code has expired.' };
+// Single source of truth for whether a promo can be used right now.
+// Start date counts from 12:00 AM, end date runs through 11:59 PM (local time).
+function getPromoStatus(promo, now = new Date()) {
+  if (!promo) return { key: 'missing', label: 'Not found', reason: 'Code not found.' };
+  if (promo.active === false) return { key: 'disabled', label: 'Disabled', reason: 'This promo code is not active.' };
+  const start = parseLocalDate(promo.startDate);
+  const end = parseLocalDate(promo.endDate, true);
+  if (end && now > end) {
+    return { key: 'expired', label: 'Expired', reason: `This code expired on ${formatShortDate(promo.endDate)}.` };
   }
   if (promo.maxUses && (promo.usageCount || 0) >= promo.maxUses) {
-    return { ok: false, reason: 'This code has reached its usage limit.' };
+    return { key: 'maxed', label: 'Used up', reason: 'This code has reached its usage limit.' };
   }
-  return { ok: true };
+  if (start && now < start) {
+    return { key: 'scheduled', label: `Starts ${formatShortDate(promo.startDate, false)}`, reason: `This code starts on ${formatShortDate(promo.startDate)}.` };
+  }
+  if (promo.validMonth && parseInt(promo.validMonth) !== now.getMonth() + 1) {
+    const month = MONTH_NAMES[promo.validMonth - 1];
+    return { key: 'offmonth', label: `${month} only`, reason: `This code is only valid in ${month}.` };
+  }
+  return { key: 'active', label: end ? `Active · ${daysLeftText(end)}` : 'Active', reason: '' };
+}
+
+function isPromoCurrentlyValid(promo) {
+  const s = getPromoStatus(promo);
+  return s.key === 'active' ? { ok: true } : { ok: false, reason: s.reason };
 }
 
 async function applyPromoCode(codeOverride, silent = false) {
@@ -587,7 +597,7 @@ async function applyPromoCode(codeOverride, silent = false) {
       appliedPromo = null;
       if (status) { status.style.display = 'block'; status.className = 'promo-code-status invalid'; status.textContent = 'Code not found.'; }
       if (clearBtn) clearBtn.style.display = 'none';
-      renderPaymentSummary();
+      renderPaymentSummary(false);
       return;
     }
     const check = isPromoCurrentlyValid(promo);
@@ -595,24 +605,26 @@ async function applyPromoCode(codeOverride, silent = false) {
       appliedPromo = null;
       if (status) { status.style.display = 'block'; status.className = 'promo-code-status invalid'; status.textContent = check.reason; }
       if (clearBtn) clearBtn.style.display = 'none';
-      renderPaymentSummary();
+      renderPaymentSummary(false);
       return;
     }
     appliedPromo = {
       id: promo.id,
       code: promo.code,
       percentOff: parseFloat(promo.percentOff) || 10,
-      description: promo.description || ''
+      description: promo.description || '',
+      source: promo
     };
     if (input) input.value = promo.code;
     if (status) {
       status.style.display = 'block';
       status.className = 'promo-code-status valid';
-      status.textContent = `✅ ${promo.code} applied — ${appliedPromo.percentOff}% off${promo.description ? ' · ' + promo.description : ''}`;
+      const until = promo.endDate ? ` · valid through ${formatShortDate(promo.endDate)}` : '';
+      status.textContent = `✅ ${promo.code} applied — ${appliedPromo.percentOff}% off${until}`;
     }
     if (clearBtn) clearBtn.style.display = 'inline-flex';
     if (!silent) showToast(`Promo applied: ${appliedPromo.percentOff}% off`, 'success');
-    renderPaymentSummary();
+    renderPaymentSummary(false);
   } catch (e) {
     console.warn('applyPromoCode failed:', e);
     if (!silent) showToast('Could not apply promo code.', 'error');
@@ -627,10 +639,18 @@ function clearPromoCode() {
   if (input) input.value = '';
   if (status) { status.style.display = 'none'; status.textContent = ''; }
   if (clearBtn) clearBtn.style.display = 'none';
-  renderPaymentSummary();
+  renderPaymentSummary(false);
 }
 
 async function submitBooking() {
+
+  // A promo can expire while the customer sits on checkout — drop it and let them review the new total
+  if (appliedPromo && getPromoStatus(appliedPromo.source).key !== 'active') {
+    const expiredCode = appliedPromo.code;
+    clearPromoCode();
+    showToast(`Promo ${expiredCode} is no longer active — your total has been updated. Please review and confirm again.`, 'error');
+    return;
+  }
 
   const t = computeBookingTotals();
   const pkg = t.pkg;
@@ -2044,6 +2064,7 @@ async function submitMembership() {
 
   try {
     const result = await DataStore.createMembership(membership);
+    sendMembershipEmail(membership, result.membershipCode);
     launchConfetti();
     showToast('Membership registered successfully!', 'success');
 
@@ -2762,6 +2783,75 @@ async function sendBookingEmail(booking, confirmCode, total, deposit) {
   } catch (e) { console.warn('Email fallback failed:', e); }
 }
 
+function buildMembershipEmailBody(m, code) {
+  const divider = '─'.repeat(36);
+  const kids = (m.children || []).map(c => `  • ${c.name || '(no name)'}${c.age ? ` (Age ${c.age})` : ''}`).join('\n');
+  const visits = m.visitsPerMonth
+    ? `${m.visitsPerMonth} visits/month per child${m.weekdayOnly ? ' (weekdays only)' : ''}`
+    : 'Unlimited open play';
+  const term = m.planType === 'annual'
+    ? `12-month commitment — $${m.totalTermCost} total`
+    : 'Month-to-month (30 days notice to cancel)';
+  return `🍑 NEW MEMBERSHIP — ${code}
+${divider}
+PLAN
+  Plan:     ${m.planName}
+  Visits:   ${visits}
+  Monthly:  $${m.monthlyRate}/month${m.numberOfSiblings ? ` (incl. ${m.numberOfSiblings} sibling${m.numberOfSiblings > 1 ? 's' : ''} at $${m.siblingFee}/mo)` : ''}
+  Term:     ${term}
+
+MEMBER
+  Name:     ${m.firstName} ${m.lastName}
+  Phone:    ${m.phone}
+  Email:    ${m.email || 'Not provided'}
+  Address:  ${m.address || 'Not provided'}
+
+CHILDREN (${(m.children || []).length})
+${kids}
+${divider}
+STATUS: Pending — agreed to terms online.
+Follow up within 24 hours to finalize recurring payment setup.
+View it in Admin → Members.`;
+}
+
+async function sendMembershipEmail(membership, code) {
+  const body = buildMembershipEmailBody(membership, code);
+  const subject = `🍑 New Membership: ${code} — ${membership.planName} ($${membership.monthlyRate}/mo) for ${membership.firstName} ${membership.lastName}`;
+
+  if (CONFIG.emailjsServiceId && CONFIG.emailjsTemplateId && CONFIG.emailjsPublicKey) {
+    try {
+      await emailjs.send(CONFIG.emailjsServiceId, CONFIG.emailjsTemplateId, {
+        to_email: CONFIG.businessEmail,
+        subject,
+        confirmation_code: code,
+        first_name: membership.firstName,
+        last_name: membership.lastName,
+        phone: membership.phone,
+        email: membership.email || 'Not provided',
+        message: body
+      }, CONFIG.emailjsPublicKey);
+      console.log('✅ Membership email sent');
+    } catch (e) { console.warn('Membership email failed:', e); }
+    return;
+  }
+
+  try {
+    await fetch('https://api.web3forms.com/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        access_key: CONFIG.web3formsKey || '',
+        subject,
+        from_name: 'Peachy Pals Playland',
+        to: CONFIG.businessEmail,
+        replyto: membership.email || undefined,
+        message: body
+      })
+    });
+    console.log('✅ Membership email sent via Web3Forms');
+  } catch (e) { console.warn('Membership email failed:', e); }
+}
+
 // ==========================================
 // UTILITY FUNCTIONS
 // ==========================================
@@ -2777,6 +2867,52 @@ function formatDateDisplay(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+// Accepts 'YYYY-MM-DD' or an ISO string and returns a LOCAL date, so a date
+// picked in the admin isn't shifted a day early by UTC parsing.
+function parseLocalDate(value, endOfDay = false) {
+  if (!value) return null;
+  const m = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  return endOfDay
+    ? new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999)
+    : new Date(+m[1], +m[2] - 1, +m[3]);
+}
+
+function toDateInputValue(value) {
+  return value ? String(value).slice(0, 10) : '';
+}
+
+function formatShortDate(value, withYear = true) {
+  const d = parseLocalDate(value);
+  if (!d) return '';
+  return d.toLocaleDateString('en-US', withYear ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+}
+
+function formatTime12(hhmm) {
+  if (!hhmm) return '';
+  const m = String(hhmm).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return hhmm;
+  const h = +m[1];
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+function daysLeftText(endDate) {
+  if (!endDate) return '';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end = new Date(endDate); end.setHours(0, 0, 0, 0);
+  const days = Math.round((end - today) / 86400000);
+  if (days <= 0) return 'ends today';
+  if (days === 1) return '1 day left';
+  return `${days} days left`;
+}
+
+// For URLs placed inside attributes/CSS url(): escapeHtml leaves quotes intact, so encode them here
+function safeImageUrl(url) {
+  const u = String(url || '').trim();
+  if (!/^(https?:\/\/|data:image\/)/i.test(u)) return '';
+  return u.replace(/["'()<>\s\\]/g, c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'));
 }
 
 function escapeHtml(str) {
@@ -3132,55 +3268,106 @@ async function init() {
 
   // Live presence + visitor count popups
   initPresenceTracker();
+
+  // Public deals banner + notifications (live-updates from the admin Promo Codes tab)
+  initPromoBroadcast();
 }
 
 // ==========================================
 // ADMIN: PROMO CODES
 // ==========================================
+const PROMO_STATUS_ORDER = ['active', 'scheduled', 'offmonth', 'maxed', 'disabled', 'expired'];
+let adminPromoCache = [];
+let adminPromoFilter = 'all';
+
+function promoScheduleText(c) {
+  const parts = [];
+  if (c.startDate && c.endDate) parts.push(`${formatShortDate(c.startDate, false)} – ${formatShortDate(c.endDate)}`);
+  else if (c.startDate) parts.push(`From ${formatShortDate(c.startDate)}`);
+  else if (c.endDate) parts.push(`Until ${formatShortDate(c.endDate)}`);
+  else parts.push('No end date');
+  if (c.validMonth) parts.push(`${MONTH_NAMES[c.validMonth - 1]} only`);
+  return parts.join(' · ');
+}
+
 async function loadAdminPromos() {
   const list = document.getElementById('adminPromosList');
   if (!list) return;
   list.innerHTML = '<p style="color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
   try {
-    const codes = await DataStore.getPromoCodes();
-    if (codes.length === 0) {
-      list.innerHTML = '<div class="no-bookings-msg">No promo codes yet. Click <strong>New Promo Code</strong> to create one.</div>';
-      return;
-    }
-    list.innerHTML = `
-      <table class="admin-table promo-table">
-        <thead>
-          <tr><th>Code</th><th>Discount</th><th>Valid</th><th>Uses</th><th>Description</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          ${codes.map(c => renderPromoRow(c)).join('')}
-        </tbody>
-      </table>
-    `;
+    adminPromoCache = await DataStore.getPromoCodes();
+    renderAdminPromos();
   } catch (e) {
     console.warn('loadAdminPromos:', e);
     list.innerHTML = '<p style="color:#e53935">Could not load promo codes.</p>';
   }
 }
 
-function renderPromoRow(c) {
-  const inactive = c.active === false;
-  const usage = (c.usageCount || 0) + (c.maxUses ? ` / ${c.maxUses}` : '');
-  let validText = 'Always';
-  if (c.validMonth) validText = `${MONTH_NAMES[c.validMonth - 1]} only`;
-  else if (c.startDate || c.endDate) {
-    const s = c.startDate ? new Date(c.startDate).toLocaleDateString() : '—';
-    const e = c.endDate ? new Date(c.endDate).toLocaleDateString() : '—';
-    validText = `${s} → ${e}`;
+function setAdminPromoFilter(filter) {
+  adminPromoFilter = filter;
+  renderAdminPromos();
+}
+
+function renderAdminPromos() {
+  const list = document.getElementById('adminPromosList');
+  if (!list) return;
+  if (adminPromoCache.length === 0) {
+    list.innerHTML = '<div class="no-bookings-msg">🐼 No promo codes yet. Click <strong>New Promo Code</strong> to create your first deal.</div>';
+    return;
   }
+
+  const withStatus = adminPromoCache.map(c => ({ c, s: getPromoStatus(c) }));
+  const count = key => withStatus.filter(x => x.s.key === key).length;
+  const liveOnSite = withStatus.filter(x => x.s.key === 'active' && x.c.showOnSite && !x.c.autoGenerated).length;
+  const filters = [
+    ['all', 'All', withStatus.length],
+    ['active', 'Active', count('active')],
+    ['scheduled', 'Scheduled', count('scheduled')],
+    ['expired', 'Expired', count('expired')],
+    ['birthday', 'Birthday', withStatus.filter(x => x.c.autoGenerated).length]
+  ];
+
+  let rows = withStatus;
+  if (adminPromoFilter === 'birthday') rows = rows.filter(x => x.c.autoGenerated);
+  else if (adminPromoFilter !== 'all') rows = rows.filter(x => x.s.key === adminPromoFilter);
+  rows.sort((a, b) => PROMO_STATUS_ORDER.indexOf(a.s.key) - PROMO_STATUS_ORDER.indexOf(b.s.key)
+    || (b.c.createdAt || '').localeCompare(a.c.createdAt || ''));
+
+  list.innerHTML = `
+    <div class="promo-admin-summary">
+      <span class="promo-live-count"><span class="live-dot"></span> ${liveOnSite} deal${liveOnSite !== 1 ? 's' : ''} live on the website banner</span>
+      <div class="promo-filter-chips">
+        ${filters.map(([key, label, n]) => `<button type="button" class="${adminPromoFilter === key ? 'active' : ''}" onclick="setAdminPromoFilter('${key}')">${label} <span>${n}</span></button>`).join('')}
+      </div>
+    </div>
+    ${rows.length === 0 ? '<div class="no-bookings-msg">No codes match this filter.</div>' : `
+    <table class="admin-table promo-table">
+      <thead>
+        <tr><th>Code</th><th>Status</th><th>Discount</th><th>Schedule</th><th>Uses</th><th>Description</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map(({ c, s }) => renderPromoRow(c, s)).join('')}
+      </tbody>
+    </table>`}
+  `;
+}
+
+function renderPromoRow(c, s = getPromoStatus(c)) {
+  const usage = (c.usageCount || 0) + (c.maxUses ? ` / ${c.maxUses}` : '');
+  const dim = ['expired', 'disabled', 'maxed'].includes(s.key);
   return `
-    <tr class="${inactive ? 'promo-inactive' : ''}">
-      <td><strong>${escapeHtml(c.code)}</strong>${inactive ? ' <span class="pill pill-gray">Inactive</span>' : ''}${c.autoGenerated ? ' <span class="pill pill-peach">Birthday</span>' : ''}</td>
-      <td>${c.percentOff || 0}% off</td>
-      <td>${validText}</td>
-      <td>${usage}</td>
-      <td style="color:var(--gray);font-size:0.85rem">${escapeHtml(c.description || '')}</td>
+    <tr class="${dim ? 'promo-inactive' : ''}">
       <td>
+        <strong>${escapeHtml(c.code)}</strong>
+        ${c.autoGenerated ? ' <span class="pill pill-peach">Birthday</span>' : ''}
+        ${c.showOnSite && !c.autoGenerated ? ' <span class="pill pill-bamboo" title="Shown on the website banner">🎋 On site</span>' : ''}
+      </td>
+      <td><span class="status-pill status-${s.key}">${escapeHtml(s.label)}</span></td>
+      <td>${c.percentOff || 0}% off</td>
+      <td style="font-size:0.85rem">${escapeHtml(promoScheduleText(c))}</td>
+      <td>${usage}</td>
+      <td style="color:var(--gray);font-size:0.85rem;white-space:normal;max-width:220px">${escapeHtml(c.description || '')}</td>
+      <td style="white-space:nowrap">
         <button class="btn btn-outline btn-sm" onclick="openPromoEditor('${c.id}')" title="Edit"><i class="fas fa-edit"></i></button>
         <button class="btn btn-danger btn-sm" onclick="deleteAdminPromo('${c.id}','${escapeHtml(c.code)}')" title="Delete"><i class="fas fa-trash"></i></button>
       </td>
@@ -3189,7 +3376,7 @@ function renderPromoRow(c) {
 }
 
 async function openPromoEditor(id) {
-  let promo = { code: '', percentOff: 10, validMonth: '', startDate: '', endDate: '', maxUses: '', description: '', active: true };
+  let promo = { code: '', percentOff: 10, validMonth: '', startDate: '', endDate: '', maxUses: '', description: '', bannerText: '', active: true, showOnSite: true };
   if (id) {
     try {
       const all = await DataStore.getPromoCodes();
@@ -3199,27 +3386,50 @@ async function openPromoEditor(id) {
   const monthOpts = ['<option value="">Any month</option>'].concat(
     MONTH_NAMES.map((m, i) => `<option value="${i + 1}"${promo.validMonth == i + 1 ? ' selected' : ''}>${m}</option>`)
   ).join('');
-  const startDate = promo.startDate ? new Date(promo.startDate).toISOString().slice(0, 10) : '';
-  const endDate = promo.endDate ? new Date(promo.endDate).toISOString().slice(0, 10) : '';
   openModal(`
     <h2><i class="fas fa-tag" style="color:var(--peach)"></i> ${id ? 'Edit' : 'New'} Promo Code</h2>
-    <form class="booking-form" id="promoEditForm" onsubmit="return false" style="margin-top:1rem">
+    <form class="booking-form" id="promoEditForm" onsubmit="return false" oninput="updatePromoSchedulePreview()" onchange="updatePromoSchedulePreview()" style="margin-top:1rem">
       <div class="form-row">
-        <div class="form-group" style="flex:2"><label>Code *</label><input type="text" id="promoCode" value="${escapeHtml(promo.code)}" placeholder="e.g. BIRTHDAY10" oninput="this.value=this.value.toUpperCase()" required></div>
+        <div class="form-group" style="flex:2"><label>Code *</label><input type="text" id="promoCode" value="${escapeHtml(promo.code)}" placeholder="e.g. FALLFUN20" oninput="this.value=this.value.toUpperCase()" required></div>
         <div class="form-group"><label>% Off *</label><input type="number" id="promoPercent" value="${promo.percentOff || 10}" min="1" max="100" required></div>
       </div>
+
+      <div class="promo-schedule-box">
+        <h4><i class="fas fa-calendar-alt"></i> Promo Schedule</h4>
+        <div class="form-row">
+          <div class="form-group"><label>Start Date <small>(starts 12:00 AM)</small></label><input type="date" id="promoStart" value="${toDateInputValue(promo.startDate)}"></div>
+          <div class="form-group"><label>End Date <small>(ends 11:59 PM)</small></label><input type="date" id="promoEnd" value="${toDateInputValue(promo.endDate)}" min="${toDateInputValue(promo.startDate) || ''}"></div>
+        </div>
+        <div class="promo-quick-dates">
+          <span>Quick set:</span>
+          <button type="button" onclick="setPromoQuickRange('week')">1 week</button>
+          <button type="button" onclick="setPromoQuickRange('month')">Rest of this month</button>
+          <button type="button" onclick="setPromoQuickRange('30')">30 days</button>
+          <button type="button" onclick="setPromoQuickRange('none')">No end date</button>
+        </div>
+        <p class="promo-schedule-preview" id="promoSchedulePreview"></p>
+      </div>
+
       <div class="form-row">
-        <div class="form-group"><label>Valid Month <small style="color:var(--gray)">(optional)</small></label><select id="promoMonth">${monthOpts}</select></div>
+        <div class="form-group"><label>Only in Month <small style="color:var(--gray)">(optional)</small></label><select id="promoMonth">${monthOpts}</select></div>
         <div class="form-group"><label>Max Uses <small style="color:var(--gray)">(optional)</small></label><input type="number" id="promoMaxUses" value="${promo.maxUses || ''}" min="1" placeholder="Unlimited"></div>
       </div>
-      <div class="form-row">
-        <div class="form-group"><label>Start Date <small style="color:var(--gray)">(optional)</small></label><input type="date" id="promoStart" value="${startDate}"></div>
-        <div class="form-group"><label>End Date <small style="color:var(--gray)">(optional)</small></label><input type="date" id="promoEnd" value="${endDate}"></div>
+      <div class="form-group"><label>Internal Note <small style="color:var(--gray)">(admin only)</small></label><input type="text" id="promoDesc" value="${escapeHtml(promo.description || '')}" placeholder="e.g. Fall flyer campaign"></div>
+
+      <div class="promo-onsite-box ${promo.autoGenerated ? 'disabled' : ''}">
+        <label class="agreement-checkbox" style="margin:0">
+          <input type="checkbox" id="promoShowOnSite" ${promo.showOnSite && !promo.autoGenerated ? 'checked' : ''} ${promo.autoGenerated ? 'disabled' : ''}>
+          <span><strong>🎋 Feature on the website</strong> — show this deal in the top banner, the deals list, and a pop-up notification while it's active.${promo.autoGenerated ? ' <em>(Birthday codes are private and never shown.)</em>' : ''}</span>
+        </label>
+        <div class="form-group" style="margin:0.75rem 0 0">
+          <label>Banner Headline <small style="color:var(--gray)">(optional)</small></label>
+          <input type="text" id="promoBannerText" maxlength="60" value="${escapeHtml(promo.bannerText || '')}" placeholder="e.g. Fall Fun Sale!" ${promo.autoGenerated ? 'disabled' : ''}>
+        </div>
       </div>
-      <div class="form-group"><label>Description</label><input type="text" id="promoDesc" value="${escapeHtml(promo.description || '')}" placeholder="e.g. Birthday month promo for Lucy"></div>
-      <label class="agreement-checkbox" style="margin-top:0.5rem">
+
+      <label class="agreement-checkbox" style="margin-top:0.75rem">
         <input type="checkbox" id="promoActive" ${promo.active !== false ? 'checked' : ''}>
-        <span>Active (uncheck to disable without deleting)</span>
+        <span>Enabled (uncheck to pause the code without deleting it)</span>
       </label>
       <div class="step-nav" style="margin-top:1rem">
         <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -3227,6 +3437,58 @@ async function openPromoEditor(id) {
       </div>
     </form>
   `);
+  updatePromoSchedulePreview();
+}
+
+function setPromoQuickRange(kind) {
+  const startEl = document.getElementById('promoStart');
+  const endEl = document.getElementById('promoEnd');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const picked = parseLocalDate(startEl.value);
+  if (kind === 'none') { endEl.value = ''; updatePromoSchedulePreview(); return; }
+  // Quick ranges never produce an already-expired promo: a past start date moves to today
+  const start = picked && picked > today ? picked : today;
+  startEl.value = formatDate(start);
+  if (kind === 'month') { endEl.value = formatDate(new Date(start.getFullYear(), start.getMonth() + 1, 0)); }
+  else {
+    const days = kind === 'week' ? 6 : 29;
+    const end = new Date(start); end.setDate(end.getDate() + days);
+    endEl.value = formatDate(end);
+  }
+  updatePromoSchedulePreview();
+}
+
+function updatePromoSchedulePreview() {
+  const el = document.getElementById('promoSchedulePreview');
+  if (!el) return;
+  const startVal = document.getElementById('promoStart')?.value || '';
+  const endVal = document.getElementById('promoEnd')?.value || '';
+  const endEl = document.getElementById('promoEnd');
+  if (endEl) endEl.min = startVal || '';
+  if (startVal && endVal && endVal < startVal) {
+    el.className = 'promo-schedule-preview warn';
+    el.innerHTML = '⚠️ End date is before the start date.';
+    return;
+  }
+  const s = getPromoStatus({
+    startDate: startVal,
+    endDate: endVal,
+    validMonth: document.getElementById('promoMonth')?.value || null,
+    active: document.getElementById('promoActive')?.checked !== false
+  });
+  const range = startVal || endVal
+    ? `Runs ${startVal ? formatShortDate(startVal) : 'now'} → ${endVal ? formatShortDate(endVal) : 'no end date'}.`
+    : 'No dates set — runs until you disable or delete it.';
+  const icons = { active: '🟢', scheduled: '🕒', expired: '⛔', offmonth: '📅', disabled: '⏸️' };
+  const what = {
+    active: 'Customers can use it right now.',
+    scheduled: 'It will turn on automatically on the start date.',
+    expired: 'Already expired — customers can\'t use it.',
+    offmonth: s.reason,
+    disabled: 'Paused — customers can\'t use it.'
+  };
+  el.className = 'promo-schedule-preview ' + (s.key === 'expired' ? 'warn' : '');
+  el.innerHTML = `${icons[s.key] || ''} <strong>${escapeHtml(s.label)}</strong> · ${escapeHtml(range)} ${escapeHtml(what[s.key] || '')}`;
 }
 
 async function savePromoFromEditor(existingId) {
@@ -3238,22 +3500,30 @@ async function savePromoFromEditor(existingId) {
   if (percentOff < 1 || percentOff > 100) { showToast('% off must be between 1 and 100', 'error'); return; }
   const validMonth = document.getElementById('promoMonth').value ? parseInt(document.getElementById('promoMonth').value) : null;
   const maxUses = document.getElementById('promoMaxUses').value ? parseInt(document.getElementById('promoMaxUses').value) : null;
-  const startDate = document.getElementById('promoStart').value ? new Date(document.getElementById('promoStart').value).toISOString() : null;
-  const endDate = document.getElementById('promoEnd').value ? new Date(document.getElementById('promoEnd').value).toISOString() : null;
+  const startDate = document.getElementById('promoStart').value || null;
+  const endDate = document.getElementById('promoEnd').value || null;
+  if (startDate && endDate && endDate < startDate) {
+    showToast('End date must be on or after the start date', 'error'); return;
+  }
   const description = document.getElementById('promoDesc').value.trim();
   const active = document.getElementById('promoActive').checked;
 
-  // Duplicate-code check when creating
-  if (!existingId) {
-    const dup = await DataStore.findPromoCode(code);
-    if (dup) { showToast('A promo with that code already exists', 'error'); return; }
-  }
+  const all = await DataStore.getPromoCodes();
+  const existing = existingId ? all.find(c => c.id === existingId) : null;
+  const dup = all.find(c => (c.code || '').toUpperCase() === code && c.id !== existingId);
+  if (dup) { showToast('A promo with that code already exists', 'error'); return; }
 
-  const data = { code, percentOff, validMonth, maxUses, startDate, endDate, description, active };
+  const autoGenerated = !!existing?.autoGenerated;
+  const showOnSite = !autoGenerated && !!document.getElementById('promoShowOnSite')?.checked;
+  const bannerText = autoGenerated ? '' : (document.getElementById('promoBannerText')?.value.trim() || '');
+
+  // Merge so edits keep usageCount, createdAt and the birthday flag
+  const data = { ...(existing || {}), code, percentOff, validMonth, maxUses, startDate, endDate, description, active, showOnSite, bannerText };
   if (existingId) data.id = existingId;
   try {
     await DataStore.savePromoCode(data);
-    showToast('Promo code saved', 'success');
+    const status = getPromoStatus(data);
+    showToast(status.key === 'active' ? `${code} saved and live now` : `${code} saved · ${status.label}`, 'success');
     closeModal();
     loadAdminPromos();
   } catch (e) {
@@ -3534,6 +3804,57 @@ let eventsCalMonth = new Date().getMonth();
 let allPublicEvents = [];
 let allPublicBookings = [];
 
+// Events run from `date` (start) through `endDate`; older events without endDate are single-day.
+function eventEndDate(e) {
+  return e.endDate && e.endDate >= e.date ? e.endDate : e.date;
+}
+
+function eventMoment(dateStr, hhmm, endOfDay) {
+  const d = parseLocalDate(dateStr, endOfDay && !hhmm);
+  if (d && hhmm) {
+    const [h, m] = hhmm.split(':').map(Number);
+    d.setHours(h || 0, m || 0, endOfDay ? 59 : 0, 0);
+  }
+  return d;
+}
+
+function getEventStatus(e, now = new Date()) {
+  const start = eventMoment(e.date, e.startTime, false);
+  const end = eventMoment(eventEndDate(e), e.endTime, true);
+  if (end && now > end) return { key: 'ended', label: 'Ended' };
+  if (start && now >= start) return { key: 'live', label: 'Happening now' };
+  return { key: 'upcoming', label: 'Upcoming' };
+}
+
+function eventCoversDate(e, dateStr) {
+  return !!e.date && dateStr >= e.date && dateStr <= eventEndDate(e);
+}
+
+function formatEventDateRange(e) {
+  const end = eventEndDate(e);
+  if (end === e.date) {
+    const d = parseLocalDate(e.date);
+    return d ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  }
+  const sameYear = e.date.slice(0, 4) === end.slice(0, 4);
+  return `${formatShortDate(e.date, !sameYear)} – ${formatShortDate(end)}`;
+}
+
+function formatEventTimes(e) {
+  if (!e.startTime) return '';
+  return formatTime12(e.startTime) + (e.endTime ? ' – ' + formatTime12(e.endTime) : '');
+}
+
+function sortEventsForDisplay(events) {
+  const rank = { live: 0, upcoming: 1, ended: 2 };
+  return events
+    .map(e => ({ e, s: getEventStatus(e) }))
+    .sort((a, b) => rank[a.s.key] - rank[b.s.key]
+      || (a.s.key === 'ended'
+        ? eventEndDate(b.e).localeCompare(eventEndDate(a.e))
+        : (a.e.date || '').localeCompare(b.e.date || '')));
+}
+
 async function initEventsCalendar() {
   eventsCalYear = new Date().getFullYear();
   eventsCalMonth = new Date().getMonth();
@@ -3545,6 +3866,49 @@ async function initEventsCalendar() {
     ]);
   } catch(e) { console.warn('Events calendar load:', e); }
   renderEventsCalendar();
+  renderPublicEventsList();
+}
+
+function renderEventCard(e, s) {
+  const imgUrl = safeImageUrl(e.imageUrl);
+  const img = imgUrl
+    ? `<div class="event-card-img" style="background-image:url('${imgUrl}')"></div>`
+    : '<div class="event-card-img no-img"><span>🐼</span></div>';
+  const times = formatEventTimes(e);
+  return `
+    <article class="event-card event-${s.key}">
+      ${img}
+      <div class="event-card-body">
+        <span class="event-status event-status-${s.key}">${s.key === 'live' ? '<span class="live-dot"></span>' : ''}${s.label}</span>
+        <h3>${escapeHtml(e.title)}</h3>
+        <p class="event-when"><i class="far fa-calendar"></i> ${escapeHtml(formatEventDateRange(e))}${times ? ` · <i class="far fa-clock"></i> ${escapeHtml(times)}` : ''}</p>
+        ${e.description ? `<p class="event-desc">${escapeHtml(e.description)}</p>` : ''}
+      </div>
+    </article>`;
+}
+
+function renderPublicEventsList() {
+  const wrap = document.getElementById('eventsListSection');
+  if (!wrap) return;
+  const sorted = sortEventsForDisplay(allPublicEvents.filter(e => e.title && e.date));
+  if (sorted.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const group = key => sorted.filter(x => x.s.key === key);
+  const live = group('live'), upcoming = group('upcoming'), ended = group('ended');
+  const section = (title, icon, items, extraClass = '') => items.length === 0 ? '' : `
+    <div class="events-group ${extraClass}">
+      <h3 class="events-group-title">${icon} ${title} <span>${items.length}</span></h3>
+      <div class="event-cards">${items.map(x => renderEventCard(x.e, x.s)).join('')}</div>
+    </div>`;
+  wrap.innerHTML = `
+    <h2 class="events-list-heading">🎋 Special Events</h2>
+    ${section('Happening Now', '🟢', live)}
+    ${section('Coming Up', '📅', upcoming)}
+    ${live.length + upcoming.length === 0 ? '<p class="events-none-upcoming">🐼 No upcoming events right now — check back soon, or <a href="#booking" onclick="navigate(\'booking\')">book a party</a>!</p>' : ''}
+    ${section('Past Events', '🍂', ended, 'events-group-past')}
+  `;
 }
 
 function eventsCalNav(dir) {
@@ -3583,7 +3947,7 @@ function renderEventsCalendar() {
     const isPast = date < today;
     const isBlocked = blockedDates.some(b => b.date === dateStr && b.blocked);
     const dayBookings = allPublicBookings.filter(b => b.date === dateStr && b.status !== 'cancelled');
-    const dayEvents = allPublicEvents.filter(e => e.date === dateStr);
+    const dayEvents = allPublicEvents.filter(e => eventCoversDate(e, dateStr) && getEventStatus(e).key !== 'ended');
     const hasEvents = dayEvents.length > 0;
 
     let cls = 'ec-day';
@@ -3609,7 +3973,7 @@ function renderEventsCalendar() {
 
 function showEventsDayDetail(dateStr) {
   const dayBookings = allPublicBookings.filter(b => b.date === dateStr && b.status !== 'cancelled');
-  const dayEvents = allPublicEvents.filter(e => e.date === dateStr);
+  const dayEvents = allPublicEvents.filter(e => eventCoversDate(e, dateStr));
   const popup = document.getElementById('eventsDayPopup');
   const content = document.getElementById('eventsDayPopupContent');
   if (!popup || !content) return;
@@ -3619,10 +3983,15 @@ function showEventsDayDetail(dateStr) {
   if (dayEvents.length > 0) {
     html += '<h4 style="color:var(--peach-dark);margin-bottom:0.5rem"><i class="fas fa-star"></i> Special Events</h4>';
     dayEvents.forEach(e => {
-      html += `<div class="ec-popup-event">
-        ${e.imageUrl ? `<img src="${escapeHtml(e.imageUrl)}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:0.5rem">` : ''}
-        <div style="font-weight:700">${escapeHtml(e.title)}</div>
-        ${e.startTime ? `<div style="font-size:0.85rem;color:var(--gray)">${e.startTime}${e.endTime ? ' – ' + e.endTime : ''}</div>` : ''}
+      const s = getEventStatus(e);
+      const multiDay = eventEndDate(e) !== e.date;
+      const imgUrl = safeImageUrl(e.imageUrl);
+      html += `<div class="ec-popup-event ${s.key === 'ended' ? 'ended' : ''}">
+        ${imgUrl ? `<img src="${imgUrl}" alt="" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:0.5rem">` : ''}
+        <span class="event-status event-status-${s.key}">${s.key === 'live' ? '<span class="live-dot"></span>' : ''}${s.label}</span>
+        <div style="font-weight:700;margin-top:0.3rem">${escapeHtml(e.title)}</div>
+        ${multiDay ? `<div style="font-size:0.85rem;color:var(--gray)">${escapeHtml(formatEventDateRange(e))}</div>` : ''}
+        ${e.startTime ? `<div style="font-size:0.85rem;color:var(--gray)">${escapeHtml(formatEventTimes(e))}</div>` : ''}
         ${e.description ? `<div style="font-size:0.9rem;margin-top:0.3rem">${escapeHtml(e.description)}</div>` : ''}
       </div>`;
     });
@@ -3669,20 +4038,34 @@ async function loadAdminEvents() {
     list.innerHTML = '<div class="no-bookings-msg">No events yet. Create one to show it on the public calendar.</div>';
     return;
   }
-  list.innerHTML = adminEventsList.map(e => `
-    <div class="admin-event-card">
-      ${e.imageUrl ? `<div class="admin-event-img" style="background-image:url('${escapeHtml(e.imageUrl)}')"></div>` : '<div class="admin-event-img no-img"><i class="fas fa-calendar-star"></i></div>'}
+  const counts = { live: 0, upcoming: 0, ended: 0 };
+  const sorted = sortEventsForDisplay(adminEventsList);
+  sorted.forEach(x => counts[x.s.key]++);
+  list.innerHTML = `
+    <div class="admin-event-summary">
+      <span class="event-status event-status-live"><span class="live-dot"></span>${counts.live} happening now</span>
+      <span class="event-status event-status-upcoming">${counts.upcoming} upcoming</span>
+      <span class="event-status event-status-ended">${counts.ended} ended</span>
+    </div>
+  ` + sorted.map(({ e, s }) => {
+    const imgUrl = safeImageUrl(e.imageUrl);
+    const times = formatEventTimes(e);
+    return `
+    <div class="admin-event-card ${s.key === 'ended' ? 'is-ended' : ''}">
+      ${imgUrl ? `<div class="admin-event-img" style="background-image:url('${imgUrl}')"></div>` : '<div class="admin-event-img no-img">🐼</div>'}
       <div class="admin-event-body">
+        <span class="event-status event-status-${s.key}">${s.key === 'live' ? '<span class="live-dot"></span>' : ''}${s.label}</span>
         <h3>${escapeHtml(e.title)}</h3>
-        <p style="font-size:0.85rem;color:var(--gray)">${formatDateDisplay(e.date)}${e.startTime ? ' · ' + e.startTime : ''}${e.endTime ? ' – ' + e.endTime : ''}</p>
+        <p style="font-size:0.85rem;color:var(--gray)"><i class="far fa-calendar"></i> ${escapeHtml(formatEventDateRange(e))}${times ? ` · <i class="far fa-clock"></i> ${escapeHtml(times)}` : ''}</p>
+        ${s.key === 'ended' ? '<p style="font-size:0.8rem;color:var(--gray);margin-top:0.2rem">Hidden from the calendar · still listed under Past Events on the site</p>' : ''}
         ${e.description ? `<p style="font-size:0.85rem;margin-top:0.3rem">${escapeHtml(e.description)}</p>` : ''}
         <div class="admin-pkg-actions" style="margin-top:0.75rem">
           <button class="btn btn-outline btn-sm" onclick="openEventEditor('${e.id}')"><i class="fas fa-edit"></i> Edit</button>
           <button class="btn btn-danger btn-sm" onclick="deleteAdminEvent('${e.id}')"><i class="fas fa-trash"></i> Delete</button>
         </div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function openEventEditor(eventId) {
@@ -3691,10 +4074,17 @@ function openEventEditor(eventId) {
     <h2>${evt ? 'Edit' : 'New'} Event</h2>
     <form onsubmit="return false" style="margin-top:1rem">
       <div class="form-group"><label>Event Title *</label><input type="text" id="evtTitle" value="${escapeHtml(evt?.title || '')}" placeholder="e.g. Family Fun Night"></div>
-      <div class="form-row">
-        <div class="form-group"><label>Date *</label><input type="date" id="evtDate" value="${evt?.date || ''}"></div>
-        <div class="form-group"><label>Start Time</label><input type="time" id="evtStart" value="${evt?.startTime || ''}"></div>
-        <div class="form-group"><label>End Time</label><input type="time" id="evtEnd" value="${evt?.endTime || ''}"></div>
+      <div class="promo-schedule-box">
+        <h4><i class="fas fa-calendar-alt"></i> When is it?</h4>
+        <div class="form-row">
+          <div class="form-group"><label>Start Date *</label><input type="date" id="evtDate" value="${evt?.date || ''}" oninput="updateEventSchedulePreview()"></div>
+          <div class="form-group"><label>End Date <small>(optional)</small></label><input type="date" id="evtEndDate" value="${evt?.endDate && evt.endDate !== evt.date ? evt.endDate : ''}" min="${evt?.date || ''}" oninput="updateEventSchedulePreview()"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Start Time</label><input type="time" id="evtStart" value="${evt?.startTime || ''}" oninput="updateEventSchedulePreview()"></div>
+          <div class="form-group"><label>End Time</label><input type="time" id="evtEnd" value="${evt?.endTime || ''}" oninput="updateEventSchedulePreview()"></div>
+        </div>
+        <p class="promo-schedule-preview" id="evtSchedulePreview"></p>
       </div>
       <div class="form-group"><label>Description</label><textarea id="evtDesc" rows="3" placeholder="Brief description visible on the public calendar...">${escapeHtml(evt?.description || '')}</textarea></div>
       <div class="form-group">
@@ -3713,6 +4103,52 @@ function openEventEditor(eventId) {
       </div>
     </form>`;
   openModal(html);
+  updateEventSchedulePreview();
+}
+
+function readEventScheduleForm() {
+  const date = document.getElementById('evtDate')?.value || '';
+  return {
+    date,
+    endDate: document.getElementById('evtEndDate')?.value || date,
+    startTime: document.getElementById('evtStart')?.value || '',
+    endTime: document.getElementById('evtEnd')?.value || ''
+  };
+}
+
+function validateEventSchedule(s) {
+  if (s.endDate < s.date) return 'End date must be on or after the start date.';
+  if (s.endDate === s.date && s.startTime && s.endTime && s.endTime <= s.startTime) return 'End time must be after the start time.';
+  return '';
+}
+
+function updateEventSchedulePreview() {
+  const el = document.getElementById('evtSchedulePreview');
+  const endInput = document.getElementById('evtEndDate');
+  if (!el) return;
+  const s = readEventScheduleForm();
+  if (endInput) endInput.min = s.date;
+  if (!s.date) {
+    el.className = 'promo-schedule-preview';
+    el.textContent = 'Pick a start date. Leave End Date blank for a one-day event.';
+    return;
+  }
+  const problem = validateEventSchedule(s);
+  if (problem) {
+    el.className = 'promo-schedule-preview warn';
+    el.textContent = '⚠️ ' + problem;
+    return;
+  }
+  const status = getEventStatus(s);
+  const times = formatEventTimes(s);
+  const icons = { live: '🟢', upcoming: '📅', ended: '⛔' };
+  const note = {
+    live: 'Showing on the calendar now.',
+    upcoming: 'Will show on the calendar for every day it runs.',
+    ended: 'Already ended — it will be listed under Past Events and hidden from the calendar.'
+  };
+  el.className = 'promo-schedule-preview' + (status.key === 'ended' ? ' warn' : '');
+  el.textContent = `${icons[status.key]} ${formatEventDateRange(s)}${times ? ' · ' + times : ''} — ${note[status.key]}`;
 }
 
 function previewEvtImage(input) {
@@ -3727,8 +4163,10 @@ function previewEvtImage(input) {
 
 async function saveAdminEvent(eventId) {
   const title = document.getElementById('evtTitle')?.value?.trim();
-  const date = document.getElementById('evtDate')?.value;
-  if (!title || !date) { showToast('Title and date are required', 'error'); return; }
+  const schedule = readEventScheduleForm();
+  if (!title || !schedule.date) { showToast('Title and start date are required', 'error'); return; }
+  const scheduleProblem = validateEventSchedule(schedule);
+  if (scheduleProblem) { showToast(scheduleProblem, 'error'); return; }
 
   let imageUrl = document.getElementById('evtImg')?.value || '';
   const fileInput = document.getElementById('evtImgFile');
@@ -3751,9 +4189,10 @@ async function saveAdminEvent(eventId) {
 
   const data = {
     title,
-    date,
-    startTime: document.getElementById('evtStart')?.value || '',
-    endTime: document.getElementById('evtEnd')?.value || '',
+    date: schedule.date,
+    endDate: schedule.endDate,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
     description: document.getElementById('evtDesc')?.value?.trim() || '',
     imageUrl
   };
@@ -3851,19 +4290,25 @@ async function setMemberStatus(id, status) {
 // ==========================================
 // LIVE ACTIVITY POPUPS
 // ==========================================
-function showActivityPopup(icon, headline, sub) {
+function showActivityPopup(icon, headline, sub, opts = {}) {
   const stack = document.getElementById('activityPopupStack');
   if (!stack) return;
   const el = document.createElement('div');
-  el.className = 'activity-popup';
+  el.className = 'activity-popup' + (opts.variant ? ' ap-' + opts.variant : '');
   el.innerHTML = `<span class="ap-icon">${icon}</span><div><div class="ap-headline">${headline}</div><div class="ap-sub">${sub}</div></div>`;
   el.style.pointerEvents = 'auto';
+  if (opts.onClick) {
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.addEventListener('click', opts.onClick);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') opts.onClick(); });
+  }
   stack.appendChild(el);
   requestAnimationFrame(() => el.classList.add('ap-show'));
   setTimeout(() => {
     el.classList.remove('ap-show');
     setTimeout(() => el.remove(), 400);
-  }, 7000);
+  }, opts.duration || 7000);
 }
 
 function initActivityPopups() {
@@ -3967,6 +4412,185 @@ async function initPresenceTracker() {
   } catch (e) {
     console.warn('Presence init failed:', e);
   }
+}
+
+// ==========================================
+// PUBLIC DEALS — banner, notification, listings
+// ==========================================
+let allPromoSnapshot = [];
+let publicPromos = [];
+let promoBannerIdx = 0;
+let promoBannerTimer = null;
+let promoNotifyTimer = null;
+
+// Promo records are publicly writable, so only well-formed codes are ever rendered on the site
+const promoPct = p => Math.round(parseFloat(p.percentOff) || 0);
+
+function initPromoBroadcast() {
+  DataStore.subscribePromoCodes(codes => {
+    allPromoSnapshot = codes;
+    refreshPublicPromos();
+  });
+  // Re-check every minute so deals switch on/off at their start/end dates without a reload
+  setInterval(refreshPublicPromos, 60000);
+  window.addEventListener('resize', syncPromoBannerHeight);
+}
+
+function refreshPublicPromos() {
+  publicPromos = allPromoSnapshot
+    .filter(c => c.showOnSite && !c.autoGenerated
+      && /^[A-Z0-9_-]+$/.test(c.code || '')
+      && promoPct(c) >= 1 && promoPct(c) <= 100
+      && getPromoStatus(c).key === 'active')
+    .sort((a, b) => promoPct(b) - promoPct(a));
+  if (promoBannerIdx >= publicPromos.length) promoBannerIdx = 0;
+  renderPromoBanner();
+  renderCheckoutDealChips();
+  queuePromoNotification();
+}
+
+function promoSignature() {
+  return publicPromos.map(p => p.code).sort().join('|');
+}
+
+function promoHeadline(p) {
+  return p.bannerText || 'Save on your party booking!';
+}
+
+function promoEndsText(p) {
+  const end = parseLocalDate(p.endDate, true);
+  return end ? `ends ${formatShortDate(p.endDate, false)} · ${daysLeftText(end)}` : 'limited time';
+}
+
+function renderPromoBanner() {
+  const banner = document.getElementById('promoBanner');
+  if (!banner) return;
+  clearTimeout(promoBannerTimer);
+  let dismissed = '';
+  try { dismissed = sessionStorage.getItem('pp_promo_banner_dismissed') || ''; } catch (e) {}
+  if (publicPromos.length === 0 || currentView === 'admin' || dismissed === promoSignature()) {
+    banner.hidden = true;
+    document.body.classList.remove('promo-banner-on');
+    return;
+  }
+  const p = publicPromos[promoBannerIdx] || publicPromos[0];
+  const many = publicPromos.length > 1;
+  banner.innerHTML = `
+    <div class="promo-banner-inner">
+      <span class="promo-banner-panda" aria-hidden="true">🐼</span>
+      <div class="promo-banner-text">
+        <span class="promo-banner-tag">${promoPct(p)}% OFF</span>
+        <strong>${escapeHtml(promoHeadline(p))}</strong>
+        <span class="promo-banner-code-wrap"><span class="promo-code-label">Code </span><button type="button" class="promo-banner-code" onclick="copyPromoCode('${p.code}')" title="Copy code">${p.code} <i class="far fa-copy"></i></button></span>
+        <span class="promo-banner-ends"><i class="far fa-clock"></i> ${escapeHtml(promoEndsText(p))}</span>
+      </div>
+      <div class="promo-banner-actions">
+        <button type="button" class="promo-banner-cta" onclick="applyDealAndBook('${p.code}')">Book &amp; Save<i class="fas fa-arrow-right"></i></button>
+        ${many ? `<button type="button" class="promo-banner-all" onclick="openDealsModal()"><i class="fas fa-tags"></i><span> All deals</span> (${publicPromos.length})</button>` : ''}
+        <button type="button" class="promo-banner-close" onclick="dismissPromoBanner()" aria-label="Hide deals banner">&times;</button>
+      </div>
+    </div>
+    ${many ? `<div class="promo-banner-dots" aria-hidden="true">${publicPromos.map((_, i) => `<span class="${i === promoBannerIdx ? 'on' : ''}"></span>`).join('')}</div>` : ''}
+  `;
+  banner.hidden = false;
+  document.body.classList.add('promo-banner-on');
+  syncPromoBannerHeight();
+  if (many) {
+    promoBannerTimer = setTimeout(() => {
+      promoBannerIdx = (promoBannerIdx + 1) % publicPromos.length;
+      renderPromoBanner();
+    }, 6000);
+  }
+}
+
+function syncPromoBannerHeight() {
+  const banner = document.getElementById('promoBanner');
+  if (!banner || banner.hidden) return;
+  document.documentElement.style.setProperty('--promo-h', banner.offsetHeight + 'px');
+}
+
+function dismissPromoBanner() {
+  try { sessionStorage.setItem('pp_promo_banner_dismissed', promoSignature()); } catch (e) {}
+  renderPromoBanner();
+}
+
+async function copyPromoCode(code) {
+  try {
+    await navigator.clipboard.writeText(code);
+    showToast(`Code ${code} copied!`, 'success');
+  } catch (e) {
+    showToast(`Your code: ${code}`, 'info');
+  }
+}
+
+function applyDealAndBook(code) {
+  closeModal();
+  try { sessionStorage.setItem('pp_url_promo', code); } catch (e) {}
+  if (currentView === 'booking' && document.getElementById('bookStep4')?.classList.contains('active')) {
+    applyPromoCode(code);
+    return;
+  }
+  appliedPromo = null;
+  pendingUrlPromoCode = code;
+  showToast(`${code} will be applied automatically at checkout 🎉`, 'success');
+  if (currentView !== 'booking') navigate('booking');
+}
+
+function openDealsModal() {
+  if (publicPromos.length === 0) {
+    showToast('No deals running right now — check back soon!', 'info');
+    return;
+  }
+  openModal(`
+    <div class="deals-modal">
+      <div class="deals-modal-header">
+        <span class="deals-panda" aria-hidden="true">🐼</span>
+        <div>
+          <h2>Peachy Deals</h2>
+          <p>Running right now — pick a deal and we'll apply it at checkout.</p>
+        </div>
+      </div>
+      <div class="deals-list">
+        ${publicPromos.map(p => `
+          <div class="deal-card">
+            <div class="deal-pct"><span>${promoPct(p)}%</span><small>OFF</small></div>
+            <div class="deal-body">
+              <strong>${escapeHtml(promoHeadline(p))}</strong>
+              <div class="deal-meta"><i class="far fa-clock"></i> ${escapeHtml(promoEndsText(p))}</div>
+              <div class="deal-actions">
+                <button type="button" class="deal-code" onclick="copyPromoCode('${p.code}')" title="Copy code">${p.code} <i class="far fa-copy"></i></button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="applyDealAndBook('${p.code}')"><i class="fas fa-birthday-cake"></i> Apply &amp; Book</button>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+  `);
+}
+
+function queuePromoNotification() {
+  if (currentView === 'admin' || publicPromos.length === 0) return;
+  let seen = [];
+  try { seen = JSON.parse(sessionStorage.getItem('pp_promo_notified') || '[]'); } catch (e) {}
+  const fresh = publicPromos.filter(p => !seen.includes(p.code));
+  if (fresh.length === 0) return;
+  clearTimeout(promoNotifyTimer);
+  promoNotifyTimer = setTimeout(() => {
+    const p = fresh[0];
+    const more = fresh.length > 1 ? ` · +${fresh.length - 1} more deal${fresh.length > 2 ? 's' : ''}` : '';
+    showActivityPopup('🎋', `Deal alert: ${promoPct(p)}% off!`,
+      `Use code <strong>${p.code}</strong> · ${escapeHtml(promoEndsText(p))}${more}<br><span class="ap-link">Tap to see deals →</span>`,
+      { variant: 'deal', onClick: openDealsModal, duration: 10000 });
+    try { sessionStorage.setItem('pp_promo_notified', JSON.stringify([...seen, ...fresh.map(f => f.code)])); } catch (e) {}
+  }, 3500);
+}
+
+function renderCheckoutDealChips() {
+  const wrap = document.getElementById('promoDealChips');
+  if (!wrap) return;
+  if (publicPromos.length === 0) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '<span class="deal-chips-label">🎋 Deals running now:</span>' +
+    publicPromos.map(p => `<button type="button" class="deal-chip${appliedPromo?.code === p.code ? ' applied' : ''}" onclick="applyPromoCode('${p.code}')">${p.code} · ${promoPct(p)}% off</button>`).join('');
 }
 
 // ==========================================

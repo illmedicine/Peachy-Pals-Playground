@@ -74,6 +74,9 @@
     </div>
   </nav>
 
+  <!-- ========== DEALS BANNER (filled by renderPromoBanner) ========== -->
+  <div class="promo-banner" id="promoBanner" role="region" aria-label="Current deals" aria-live="polite" hidden></div>
+
   <!-- Mobile Nav Overlay -->
   <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileNav()"></div>
   <div class="mobile-nav" id="mobileNav">
@@ -424,6 +427,9 @@
           <div id="eventsDayPopupContent"></div>
         </div>
       </div>
+
+      <!-- Public events list: happening now, upcoming, and ended -->
+      <div class="events-list-section" id="eventsListSection"><!-- JS --></div>
     </section>
   </div>
 
@@ -609,6 +615,7 @@
             <button type="button" class="btn btn-danger btn-sm" id="btnClearPromo" onclick="clearPromoCode()" style="display:none"><i class="fas fa-times"></i></button>
           </div>
           <p id="promoCodeStatus" class="promo-code-status" style="display:none"></p>
+          <div id="promoDealChips" class="deal-chips"></div>
         </div>
         <div class="payment-summary" id="paymentSummary"><!-- JS --></div>
         <div class="payment-methods">
@@ -917,7 +924,7 @@
             <h2>Promo Codes</h2>
             <button class="btn btn-primary" onclick="openPromoEditor()"><i class="fas fa-plus"></i> New Promo Code</button>
           </div>
-          <p style="color:var(--gray);margin-bottom:1rem">Codes can be typed at checkout or applied automatically via <code>?promo=CODE</code> URLs. Birthday emails use auto-generated per-child codes valid only in that child's birthday month.</p>
+          <p style="color:var(--gray);margin-bottom:1rem">Set a start and end date and each code turns on and off by itself. Tick <strong>🎋 Feature on the website</strong> to show a deal in the top banner, the deals list, and a pop-up notification while it's active. Birthday codes stay private.</p>
           <div id="adminPromosList" class="admin-promos-list"><!-- JS --></div>
         </div>
 

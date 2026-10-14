@@ -781,6 +781,14 @@ const DataStore = {
     if (c) { c.usageCount = (c.usageCount || 0) + 1; this._promoLsSave(codes); }
   },
 
+  subscribePromoCodes(onChange) {
+    if (!isFirebaseConfigured) { onChange(this._promoLsList()); return; }
+    this._ref('promoCodes').on('value',
+      snap => onChange(this._snapToArray(snap)),
+      () => onChange(this._promoLsList())
+    );
+  },
+
   // --- POSTS (Blog) ---
   async getAllPosts(publishedOnly = true) {
     if (isFirebaseConfigured) {
