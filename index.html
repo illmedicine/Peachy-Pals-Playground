@@ -897,6 +897,7 @@
           <button class="admin-tab admin-only" data-tab="adminPackages" onclick="adminSwitchTab('adminPackages')"><i class="fas fa-gift"></i> Packages</button>
           <button class="admin-tab admin-only" data-tab="adminServices" onclick="adminSwitchTab('adminServices')"><i class="fas fa-images"></i> Services</button>
           <button class="admin-tab" data-tab="adminWaivers" onclick="adminSwitchTab('adminWaivers')"><i class="fas fa-file-signature"></i> Waivers</button>
+          <button class="admin-tab admin-only" data-tab="adminChildren" onclick="adminSwitchTab('adminChildren')"><i class="fas fa-child"></i> Children</button>
           <button class="admin-tab admin-only" data-tab="adminAvailability" onclick="adminSwitchTab('adminAvailability')"><i class="fas fa-calendar-check"></i> Availability</button>
           <button class="admin-tab admin-only" data-tab="adminEvents" onclick="adminSwitchTab('adminEvents')"><i class="fas fa-star"></i> Events</button>
           <button class="admin-tab" data-tab="adminMembers" onclick="adminSwitchTab('adminMembers')"><i class="fas fa-id-card"></i> Members</button>
@@ -960,6 +961,25 @@
           <div id="adminWaiversList" class="admin-waivers-list" style="margin-top:1rem">
             <!-- All waivers list -->
           </div>
+        </div>
+
+        <!-- Admin: Children on waivers (admin only — not available to staff PIN) -->
+        <div class="admin-panel" id="adminChildren">
+          <div class="admin-panel-header">
+            <h2>Children on Signed Waivers</h2>
+          </div>
+          <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+            <input type="search" id="childrenSearch" placeholder="Search child, parent, phone or email..." oninput="renderAdminChildren()" style="flex:1;min-width:220px;max-width:420px">
+            <select id="childrenSort" onchange="renderAdminChildren()">
+              <option value="newest">Newest signed first</option>
+              <option value="oldest">Oldest signed first</option>
+              <option value="child">Child name A–Z</option>
+              <option value="parent">Parent last name A–Z</option>
+              <option value="expiring">Waiver expiring soonest</option>
+            </select>
+          </div>
+          <p id="childrenCount" style="font-weight:700;margin-bottom:0.75rem"></p>
+          <div id="adminChildrenList"><!-- JS --></div>
         </div>
 
         <!-- Admin: Events -->

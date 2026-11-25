@@ -1570,6 +1570,18 @@ input:disabled {
   background: #FFEBEE;
   color: #C62828;
 }
+/* Days-left countdown to waiver expiry (12 months from signing) */
+.waiver-countdown {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.1rem 0.5rem;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.waiver-countdown.ok { background: #E8F5E9; color: #2E7D32; }
+.waiver-countdown.soon { background: #FFF3E0; color: #E65100; }
+.waiver-countdown.expired { background: #FFEBEE; color: #C62828; }
 .waiver-card-body p {
   font-size: 0.85rem;
   margin-bottom: 0.3rem;

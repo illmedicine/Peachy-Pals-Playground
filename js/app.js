@@ -1491,6 +1491,7 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminPackages') loadAdminPackages();
   if (tabId === 'adminServices') loadAdminServices();
   if (tabId === 'adminWaivers') loadAdminWaivers();
+  if (tabId === 'adminChildren') loadAdminChildren();
   if (tabId === 'adminAvailability') initAdminCalendar();
   if (tabId === 'adminBlog') loadAdminBlog();
   if (tabId === 'adminEvents') loadAdminEvents();
@@ -2774,9 +2775,8 @@ async function searchAdminWaivers() {
 
 function renderWaiverCard(w) {
   const signedDate = new Date(w.signedAt || w.createdAt);
-  const expiresDate = new Date(w.expiresAt);
-  const now = new Date();
-  const isExpired = expiresDate < now;
+  const expiresDate = waiverExpiryDate(w) || new Date(NaN);
+  const isExpired = !waiverIsValid(w);
   const childrenStr = (w.children || []).map(c => `${escapeHtml(c.name)} (${c.age})`).join(', ');
 
   return `
@@ -2792,7 +2792,8 @@ function renderWaiverCard(w) {
         <p><i class="fas fa-phone" style="width:16px;color:var(--gray)"></i> ${escapeHtml(w.phone || '')}</p>
         <p><i class="fas fa-child" style="width:16px;color:var(--gray)"></i> ${childrenStr || 'No children listed'}</p>
         <p><i class="fas fa-calendar" style="width:16px;color:var(--gray)"></i> Signed: ${signedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${signedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
-        <p><i class="fas fa-clock" style="width:16px;color:var(--gray)"></i> Expires: ${expiresDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+        <p><i class="fas fa-clock" style="width:16px;color:var(--gray)"></i> Expires: ${expiresDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          <span class="waiver-countdown ${waiverCountdownLevel(w)}">${waiverCountdownText(w)}</span></p>
         ${w.confirmationCode ? `<p><i class="fas fa-link" style="width:16px;color:var(--teal)"></i> Linked to Booking: <strong>${escapeHtml(w.confirmationCode)}</strong></p>` : ''}
         ${w.email ? `<p><i class="fas fa-envelope" style="width:16px;color:var(--gray)"></i> ${escapeHtml(w.email)}</p>` : ''}
         <p><i class="fas fa-signature" style="width:16px;color:var(--gray)"></i> Signature: <em style="font-family:cursive">${escapeHtml(w.signature || '')}</em></p>
@@ -2803,6 +2804,124 @@ function renderWaiverCard(w) {
       </div>`}
     </div>
   `;
+}
+
+// Admin: Children on waivers — one row per child, with signer and any package/membership on file.
+// Admin only: hidden from the staff PIN (not in STAFF_TABS) and refuses to load for staff.
+let adminChildRows = [];
+
+async function loadAdminChildren() {
+  if (adminRole !== 'admin') return;
+  const list = document.getElementById('adminChildrenList');
+  list.innerHTML = '<p style="color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+  try {
+    const [waivers, bookings, memberships] = await Promise.all([
+      DataStore.getAllWaivers(),
+      DataStore.getAllBookings(),
+      DataStore.getAllMemberships()
+    ]);
+    const phoneKey = p => (p || '').replace(/\D/g, '').slice(-10);
+    const bookingsByPhone = {};
+    bookings.filter(b => b.status !== 'cancelled' && phoneKey(b.phone)).forEach(b => {
+      (bookingsByPhone[phoneKey(b.phone)] ||= []).push(b);
+    });
+    const membershipsByPhone = {};
+    memberships.filter(m => m.status !== 'cancelled' && phoneKey(m.phone)).forEach(m => {
+      (membershipsByPhone[phoneKey(m.phone)] ||= []).push(m);
+    });
+
+    adminChildRows = [];
+    waivers.forEach(w => {
+      const key = phoneKey(w.phone);
+      // Prefer the booking this waiver was signed for; otherwise match the family's bookings by phone
+      const packages = [];
+      if (w.bookingPackage) {
+        packages.push({ type: 'party', label: w.bookingPackage, date: w.bookingDate });
+      } else {
+        (bookingsByPhone[key] || []).forEach(b => packages.push({ type: 'party', label: b.packageName || 'Party', date: b.date }));
+      }
+      (membershipsByPhone[key] || []).forEach(m => packages.push({ type: 'member', label: m.planName || m.planType || 'Membership', status: m.status }));
+
+      const children = (w.children && w.children.length) ? w.children : [{ name: '' }];
+      children.forEach(c => adminChildRows.push({
+        childName: (c.name || '').trim(),
+        age: c.age,
+        parentFirst: w.firstName || '',
+        parentLast: w.lastName || '',
+        phone: w.phone || '',
+        email: w.email || '',
+        signedAt: w.signedAt || w.createdAt || '',
+        waiver: w,
+        packages
+      }));
+    });
+    renderAdminChildren();
+  } catch (err) {
+    console.error('Children list error:', err);
+    list.innerHTML = '<p style="color:#e53935">Error loading children. Please try again.</p>';
+  }
+}
+
+function renderAdminChildren() {
+  if (adminRole !== 'admin') return;
+  const q = (document.getElementById('childrenSearch').value || '').trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, '');
+  const sort = document.getElementById('childrenSort').value;
+
+  let rows = adminChildRows.filter(r => !q ||
+    r.childName.toLowerCase().includes(q) ||
+    `${r.parentFirst} ${r.parentLast}`.toLowerCase().includes(q) ||
+    r.email.toLowerCase().includes(q) ||
+    (qDigits.length >= 3 && r.phone.replace(/\D/g, '').includes(qDigits)));
+
+  const byText = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' });
+  if (sort === 'newest') rows.sort((a, b) => b.signedAt.localeCompare(a.signedAt));
+  if (sort === 'oldest') rows.sort((a, b) => a.signedAt.localeCompare(b.signedAt));
+  if (sort === 'child') rows.sort((a, b) => byText(a.childName, b.childName));
+  if (sort === 'parent') rows.sort((a, b) => byText(a.parentLast + a.parentFirst, b.parentLast + b.parentFirst));
+  if (sort === 'expiring') {
+    // Still-valid waivers closest to expiring first, expired ones after
+    const rank = r => { const d = waiverDaysLeft(r.waiver) ?? -Infinity; return waiverIsValid(r.waiver) ? d : 100000 - d; };
+    rows.sort((a, b) => rank(a) - rank(b));
+  }
+
+  const families = new Set(rows.map(r => r.phone.replace(/\D/g, '') || r.email)).size;
+  document.getElementById('childrenCount').textContent =
+    `${rows.length} child${rows.length !== 1 ? 'ren' : ''} from ${families} famil${families !== 1 ? 'ies' : 'y'}${q ? ' matching your search' : ''}`;
+
+  const list = document.getElementById('adminChildrenList');
+  if (rows.length === 0) {
+    list.innerHTML = '<div class="no-bookings-msg">No children found.</div>';
+    return;
+  }
+
+  const pkgHtml = r => r.packages.length
+    ? r.packages.map(p => p.type === 'member'
+        ? `<span class="pill pill-teal">${escapeHtml(p.label)}${p.status && p.status !== 'active' ? ` · ${escapeHtml(p.status)}` : ''}</span>`
+        : `<span class="pill pill-peach">${escapeHtml(p.label)}${p.date ? ` · ${formatDateDisplay(p.date)}` : ''}</span>`).join(' ')
+    : '<span style="color:var(--gray);font-size:0.85rem">None on file</span>';
+
+  list.innerHTML = `
+    <table class="admin-table">
+      <thead><tr><th>Child</th><th>Age</th><th>Parent / Signer</th><th>Phone</th><th>Date Signed</th><th>Waiver Expires</th><th>Package / Membership</th></tr></thead>
+      <tbody>
+        ${rows.map(r => {
+          const signed = r.signedAt ? new Date(r.signedAt) : null;
+          const exp = waiverExpiryDate(r.waiver);
+          return `
+          <tr>
+            <td><strong>${escapeHtml(r.childName) || '<span style="color:var(--gray)">— no name —</span>'}</strong></td>
+            <td>${r.age !== undefined && r.age !== '' ? escapeHtml(String(r.age)) : ''}</td>
+            <td>${escapeHtml(r.parentFirst)} ${escapeHtml(r.parentLast)}${r.email ? `<div style="font-size:0.8rem;color:var(--gray)">${escapeHtml(r.email)}</div>` : ''}</td>
+            <td style="white-space:nowrap"><a href="tel:${escapeHtml(r.phone)}" style="color:var(--peach-dark);font-weight:700">${escapeHtml(r.phone)}</a></td>
+            <td style="white-space:nowrap">${signed ? signed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}</td>
+            <td style="white-space:nowrap">${exp ? exp.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}
+              <div><span class="waiver-countdown ${waiverCountdownLevel(r.waiver)}">${waiverCountdownText(r.waiver)}</span></div></td>
+            <td>${pkgHtml(r)}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
 }
 
 async function deleteWaiverAdmin(id) {
@@ -4665,8 +4784,42 @@ function membershipStartDate(m) {
   return m.startDate || m.createdAt || '';
 }
 
+// Waivers are valid for 12 months from the date signed.
+function waiverExpiryDate(w) {
+  if (w.expiresAt) return new Date(w.expiresAt);
+  const signed = new Date(w.signedAt || w.createdAt);
+  if (isNaN(signed)) return null;
+  return new Date(signed.getFullYear() + 1, signed.getMonth(), signed.getDate());
+}
+
 function waiverIsValid(w) {
-  return !!w.expiresAt && new Date(w.expiresAt) > new Date();
+  const exp = waiverExpiryDate(w);
+  return !!exp && exp > new Date();
+}
+
+// Whole calendar days until expiry (negative once expired)
+function waiverDaysLeft(w) {
+  const exp = waiverExpiryDate(w);
+  if (!exp) return null;
+  const day = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((day(exp) - day(new Date())) / 86400000);
+}
+
+function waiverCountdownText(w) {
+  const d = waiverDaysLeft(w);
+  if (d === null) return '';
+  if (!waiverIsValid(w)) {
+    const ago = Math.abs(d);
+    return ago === 0 ? 'Expired today' : `Expired ${ago} day${ago !== 1 ? 's' : ''} ago`;
+  }
+  if (d === 0) return 'Expires today';
+  return `${d} day${d !== 1 ? 's' : ''} left`;
+}
+
+// 'ok' | 'soon' (30 days or fewer) | 'expired' — for coloring countdowns
+function waiverCountdownLevel(w) {
+  if (!waiverIsValid(w)) return 'expired';
+  return waiverDaysLeft(w) <= 30 ? 'soon' : 'ok';
 }
 
 function ageInYears(birthMonth, birthYear) {
@@ -4853,7 +5006,7 @@ function renderAccountPortal(user, memberships, waivers, bookings) {
           <strong>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))}</strong>
           ${kids ? `<div class="account-row-sub"><i class="fas fa-child"></i> ${kids}</div>` : ''}
         </div>
-        <span class="status-pill ${valid ? 'status-active' : 'status-expired'}">${valid ? 'Valid until ' + escapeHtml(formatRecordDate(w.expiresAt)) : 'Expired'}</span>
+        <span class="status-pill ${valid ? 'status-active' : 'status-expired'}">${valid ? 'Valid until ' + escapeHtml(formatRecordDate(waiverExpiryDate(w).toISOString())) + ' · ' + waiverCountdownText(w) : 'Expired'}</span>
       </div>`;
   }).join('')) + (hasValidWaiver ? '' : '<button class="btn btn-primary btn-sm account-cta" onclick="navigate(\'waiver\')"><i class="fas fa-file-signature"></i> Sign a waiver</button>');
 
@@ -4975,9 +5128,10 @@ function familyMembershipState(f) {
 function familyWaiverState(f) {
   const latest = [...f.waivers].sort((a, b) => (b.signedAt || b.createdAt || '').localeCompare(a.signedAt || a.createdAt || ''))[0];
   if (!latest) return { key: 'none', label: 'No waiver on file' };
+  const exp = waiverExpiryDate(latest);
   return waiverIsValid(latest)
-    ? { key: 'valid', label: `Waiver valid until ${formatRecordDate(latest.expiresAt)}` }
-    : { key: 'expired', label: `Waiver expired ${formatRecordDate(latest.expiresAt)}` };
+    ? { key: 'valid', label: `Waiver valid until ${formatRecordDate(exp.toISOString())} (${waiverCountdownText(latest)})` }
+    : { key: 'expired', label: `Waiver expired ${exp ? formatRecordDate(exp.toISOString()) : ''}` };
 }
 
 async function loadFamilyLookup(memberships) {
@@ -5105,7 +5259,8 @@ function renderFamilyDetail() {
         ${admin && m.id ? `<button class="link-btn" onclick="openChangePlan('${m.id}')">Change plan</button>` : ''}</li>`).join('')
     : '<li class="muted">None on file</li>';
   const waiverRows = f.waivers.length ? sortDesc(f.waivers, 'signedAt').map(w => `
-      <li>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))} — ${waiverIsValid(w) ? 'valid until ' + escapeHtml(formatRecordDate(w.expiresAt)) : 'expired'}
+      <li>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))} — ${waiverIsValid(w) ? 'valid until ' + escapeHtml(formatRecordDate(waiverExpiryDate(w).toISOString())) : 'expired'}
+        <span class="waiver-countdown ${waiverCountdownLevel(w)}">${waiverCountdownText(w)}</span>
         ${(w.children || []).length ? '· ' + (w.children || []).map(c => escapeHtml(c.name)).join(', ') : ''}</li>`).join('')
     : '<li class="muted">None on file</li>';
   const bookingRows = f.bookings.length ? sortDesc(f.bookings, 'date').map(b => `
