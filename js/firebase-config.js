@@ -101,12 +101,19 @@ const DataStore = {
   },
 
   // --- BOOKINGS ---
-  async createBooking(booking) {
+  async createBooking(booking, historyEntry) {
     booking.createdAt = new Date().toISOString();
     booking.confirmationCode = 'PP-' + Date.now().toString(36).toUpperCase().slice(-6);
     if (isFirebaseConfigured) {
       const ref = this._ref('bookings').push();
-      await ref.set(booking);
+      if (historyEntry) {
+        await db.ref().update({
+          ['bookings/' + ref.key]: booking,
+          ...this._historyUpdate(ref.key, historyEntry)
+        });
+      } else {
+        await ref.set(booking);
+      }
       return { id: ref.key, ...booking };
     }
     const bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
@@ -146,15 +153,43 @@ const DataStore = {
     return JSON.parse(localStorage.getItem('pp_bookings') || '[]').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   },
 
-  async updateBooking(id, data) {
+  // historyEntry ({ action, role, by, via, details? }) is appended to the booking's
+  // change log in the same atomic write. The log is append-only, admin-readable,
+  // and stamped with Firebase server time — see bookingHistory in database.rules.json.
+  async updateBooking(id, data, historyEntry) {
     if (isFirebaseConfigured) {
-      await this._ref('bookings/' + id).update(data);
+      if (historyEntry) {
+        const paths = {};
+        Object.entries(data).forEach(([k, v]) => { paths['bookings/' + id + '/' + k] = v; });
+        await db.ref().update({ ...paths, ...this._historyUpdate(id, historyEntry) });
+      } else {
+        await this._ref('bookings/' + id).update(data);
+      }
       return;
     }
     const bookings = JSON.parse(localStorage.getItem('pp_bookings') || '[]');
     const idx = bookings.findIndex(b => b.id === id);
-    if (idx >= 0) Object.assign(bookings[idx], data);
+    if (idx >= 0) {
+      Object.assign(bookings[idx], data);
+      if (historyEntry) (bookings[idx].history ||= []).push({ ...historyEntry, ts: Date.now() });
+    }
     localStorage.setItem('pp_bookings', JSON.stringify(bookings));
+  },
+
+  _historyUpdate(bookingId, entry) {
+    const key = this._ref('bookingHistory/' + bookingId).push().key;
+    const clean = {};
+    Object.entries(entry).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') clean[k] = v; });
+    return { ['bookingHistory/' + bookingId + '/' + key]: { ...clean, ts: firebase.database.ServerValue.TIMESTAMP } };
+  },
+
+  async getBookingHistory(bookingId) {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('bookingHistory/' + bookingId).orderByChild('ts').once('value');
+      return this._snapToArray(snap);
+    }
+    const b = JSON.parse(localStorage.getItem('pp_bookings') || '[]').find(x => x.id === bookingId);
+    return (b?.history || []).slice().sort((a, c) => a.ts - c.ts);
   },
 
   async deleteBooking(id) {
@@ -609,9 +644,20 @@ const DataStore = {
   },
 
   // --- WAIVERS ---
+  // Waivers are admin-read-only. Families can read only their own, via indexed
+  // queries on ownerUid, emailKey (lowercased email) or phoneKey (10 digits) —
+  // see database.rules.json.
+  _waiverPhoneKey(phone) {
+    let d = String(phone || '').replace(/\D/g, '');
+    if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
+    return d.length >= 7 ? d : '';
+  },
+
   async createWaiver(waiver) {
     waiver.createdAt = new Date().toISOString();
     waiver.waiverId = 'WVR-' + Date.now().toString(36).toUpperCase().slice(-6);
+    waiver.emailKey = String(waiver.email || '').trim().toLowerCase();
+    waiver.phoneKey = this._waiverPhoneKey(waiver.phone);
     if (isFirebaseConfigured) {
       const ref = this._ref('waivers').push();
       await ref.set(waiver);
@@ -630,6 +676,27 @@ const DataStore = {
       return this._snapToArray(snap).reverse();
     }
     return JSON.parse(localStorage.getItem('pp_waivers') || '[]').sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  // A signed-in family's own waivers: matched by account, verified email, or admin-linked phones
+  async getMyWaivers(uid, email, linkedPhoneKeys = []) {
+    if (!isFirebaseConfigured) {
+      const all = JSON.parse(localStorage.getItem('pp_waivers') || '[]');
+      const em = String(email || '').trim().toLowerCase();
+      return all.filter(w => w.ownerUid === uid || (em && String(w.email || '').trim().toLowerCase() === em)
+        || linkedPhoneKeys.includes(this._waiverPhoneKey(w.phone)));
+    }
+    const q = (field, value) => this._ref('waivers').orderByChild(field).equalTo(value).once('value')
+      .then(snap => this._snapToArray(snap))
+      .catch(e => { console.warn('waivers by ' + field + ':', e.code || e); return []; });
+    const lists = await Promise.all([
+      q('ownerUid', uid),
+      email ? q('emailKey', String(email).trim().toLowerCase()) : [],
+      ...linkedPhoneKeys.map(p => q('phoneKey', p))
+    ]);
+    const byId = new Map();
+    lists.flat().forEach(w => byId.set(w.id, w));
+    return [...byId.values()];
   },
 
   async findWaiversByPhone(phone) {

@@ -63,7 +63,8 @@ let blockedDates = [];
 let allBookings = [];
 let isAdminLoggedIn = false;
 let adminRole = null;            // 'admin' | 'staff' while logged in
-const STAFF_TABS = ['adminBookings', 'adminWaivers', 'adminMembers'];
+// Waivers are admin-only (database rules); staff PIN sessions aren't signed in to Firebase
+const STAFF_TABS = ['adminBookings', 'adminMembers'];
 let selectedMembershipPlan = null;
 let dateBookings = [];
 let appliedPromo = null;         // { id, code, percentOff, description }
@@ -737,7 +738,7 @@ async function submitBooking() {
   }
 
   try {
-    const result = await DataStore.createBooking(booking);
+    const result = await DataStore.createBooking(booking, { action: 'created', ...bookingActor(false, 'Online booking') });
     if (appliedPromo?.id) {
       try { await DataStore.incrementPromoUsage(appliedPromo.id); } catch(e) { console.warn('promo usage:', e); }
     }
@@ -1029,6 +1030,8 @@ function selectTime(slot) {
 // ==========================================
 // MANAGE BOOKING
 // ==========================================
+let lastLookupBookings = [];  // customer's looked-up bookings, for edit history
+
 async function lookupBooking() {
   const lastName = document.getElementById('lookupLastName').value.trim();
   const phone = document.getElementById('lookupPhone').value.trim();
@@ -1043,6 +1046,7 @@ async function lookupBooking() {
 
   try {
     const bookings = await DataStore.findBookings(phone, lastName);
+    lastLookupBookings = bookings;
     if (bookings.length === 0) {
       resultsDiv.style.display = 'block';
       resultsDiv.innerHTML = `
@@ -1087,6 +1091,7 @@ function renderBookingCard(b, isAdmin) {
         <dt>Payment:</dt><dd>${b.paymentMethod === 'square' ? 'Card (Square)' : (b.paymentMethod || 'N/A')}</dd>
         ${b.specialRequests ? `<dt>Requests:</dt><dd>${escapeHtml(b.specialRequests)}</dd>` : ''}
       </dl>
+      ${isAdmin && b.status === 'cancelled' ? renderCancellationNote(b) : ''}
       ${!b.depositPaid && b.status !== 'cancelled' && !isAdmin ? `
         <div class="booking-pay-section">
           <p style="font-weight:700;font-size:0.9rem;margin-bottom:0.5rem"><i class="fas fa-credit-card" style="color:var(--peach)"></i> Pay Deposit — $${b.depositAmount || 0}</p>
@@ -1102,11 +1107,62 @@ function renderBookingCard(b, isAdmin) {
         ${isAdmin ? `
           ${b.status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="confirmBookingAdmin('${b.id}')"><i class="fas fa-check"></i> Confirm</button>` : ''}
           ${!b.depositPaid ? `<button class="btn btn-primary btn-sm" onclick="markDepositPaid('${b.id}')"><i class="fas fa-dollar-sign"></i> Mark Paid</button>` : ''}
+          <button class="btn btn-outline btn-sm" onclick="showBookingHistory('${b.id}')"><i class="fas fa-history"></i> History</button>
           <button class="btn btn-danger btn-sm" onclick="deleteBookingAdmin('${b.id}')"><i class="fas fa-trash"></i> Delete</button>
         ` : ''}
       </div>`}
     </div>
   `;
+}
+
+// Change tracking started with this release; earlier cancellations have no record of when/who.
+const BOOKING_HISTORY_SINCE = 'Nov 25, 2026';
+
+function formatHistoryTime(t) {
+  const d = new Date(t);
+  return isNaN(d) ? '' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function describeActor(role, by, via) {
+  const who = role === 'admin' ? `admin ${by}` : `customer${by && !by.startsWith('Guest') ? ' ' + by : ' (not signed in)'}`;
+  return `${who}${via ? ' · ' + via : ''}`;
+}
+
+function renderCancellationNote(b) {
+  if (!b.cancelledAt) {
+    return `<div class="cancel-note unknown"><i class="fas fa-question-circle"></i> Cancelled before change tracking began (${BOOKING_HISTORY_SINCE}) — no record of when or by whom.</div>`;
+  }
+  return `
+    <div class="cancel-note">
+      <i class="fas fa-ban"></i> Cancelled <strong>${escapeHtml(formatHistoryTime(b.cancelledAt))}</strong>
+      by <strong>${escapeHtml(describeActor(b.cancelledByRole, b.cancelledBy, b.cancelledVia))}</strong>
+      ${b.cancelReason ? `<div class="cancel-reason">Reason: “${escapeHtml(b.cancelReason)}”</div>` : ''}
+    </div>`;
+}
+
+async function showBookingHistory(bookingId) {
+  if (adminRole !== 'admin') return;
+  const b = allBookings.find(x => x.id === bookingId) || {};
+  openModal(`<h2 style="margin-bottom:1rem"><i class="fas fa-history"></i> Booking History</h2><p style="color:var(--gray)"><i class="fas fa-spinner fa-spin"></i> Loading...</p>`);
+  let entries = [];
+  try {
+    entries = await DataStore.getBookingHistory(bookingId);
+  } catch (e) {
+    console.error('history:', e);
+  }
+  const rows = entries.map(h => `
+    <li class="history-entry history-${escapeHtml((h.action || '').split(' ')[0])}">
+      <div class="history-when">${escapeHtml(formatHistoryTime(h.ts))}</div>
+      <div><strong>${escapeHtml(h.action || 'changed')}</strong> by ${escapeHtml(describeActor(h.role, h.by, h.via))}
+        ${h.details ? `<div class="history-details">${escapeHtml(h.details)}</div>` : ''}</div>
+    </li>`).join('');
+  openModal(`
+    <h2 style="margin-bottom:0.25rem"><i class="fas fa-history"></i> Booking History</h2>
+    <p style="color:var(--gray);margin-bottom:1rem">${escapeHtml(b.packageName || 'Party')} · ${escapeHtml(b.confirmationCode || '')} · ${escapeHtml(((b.firstName || '') + ' ' + (b.lastName || '')).trim())}</p>
+    ${b.createdAt && !entries.some(h => h.action === 'created') ? `<p style="font-size:0.9rem;margin-bottom:0.75rem">Booked online ${escapeHtml(formatHistoryTime(b.createdAt))}</p>` : ''}
+    ${rows ? `<ul class="history-list">${rows}</ul>` : ''}
+    <p style="font-size:0.85rem;color:var(--gray);margin-top:1rem">Changes are recorded from ${BOOKING_HISTORY_SINCE} onward. Times come from the server and entries can't be edited or deleted.${rows ? '' : ' No changes recorded for this booking yet.'}</p>
+    <div style="margin-top:1rem"><button class="btn btn-outline" onclick="closeModal()">Close</button></div>`);
 }
 
 async function editBooking(bookingId, isAdmin) {
@@ -1165,8 +1221,16 @@ async function saveBookingEdit(bookingId, isAdmin) {
     specialRequests: document.getElementById('editRequests').value.trim()
   };
 
+  // Note what changed for the booking's history
+  const before = (isAdmin ? allBookings : lastLookupBookings).find(b => b.id === bookingId) || {};
+  const labels = { date: 'date', timeSlot: 'time', numberOfKids: 'kids', numberOfAdults: 'adults', specialRequests: 'requests' };
+  const changes = Object.keys(labels)
+    .filter(k => String(before[k] ?? '') !== String(data[k] ?? ''))
+    .map(k => k === 'specialRequests' ? 'requests updated' : `${labels[k]} ${before[k] ?? '—'} → ${data[k]}`);
+
   try {
-    await DataStore.updateBooking(bookingId, data);
+    await DataStore.updateBooking(bookingId, data,
+      { action: 'edited', details: changes.join(', ') || 'no changes', ...bookingActor(isAdmin) });
     showToast('Booking updated successfully!', 'success');
     if (isAdmin) {
       closeModal();
@@ -1186,11 +1250,37 @@ function cancelEdit(isAdmin) {
   else document.getElementById('editBookingBox').style.display = 'none';
 }
 
+// Who is changing a booking, for its history. Admins are identified by their verified
+// sign-in; everyone else is a customer on a public page.
+function bookingActor(isAdmin, via) {
+  if (isAdmin && adminRole === 'admin' && auth?.currentUser?.email) {
+    return { role: 'admin', by: auth.currentUser.email, via: via || 'Admin dashboard' };
+  }
+  const member = currentMemberUser();
+  return {
+    role: 'customer',
+    by: member && !isAdminUser(member) ? member.email : 'Guest (not signed in)',
+    via: via || 'Manage Booking page'
+  };
+}
+
 async function cancelBooking(bookingId, isAdmin) {
   if (isAdmin && staffBlocked()) return;
   if (!confirm('Are you sure you want to cancel this booking?')) return;
+  const reason = prompt(isAdmin
+    ? 'Reason for cancelling (optional — saved to the booking history):'
+    : 'Sorry to see you go! Let us know why you are cancelling (optional):', '');
+  if (reason === null) return;  // closed the prompt = keep the booking
+  const actor = bookingActor(isAdmin);
   try {
-    await DataStore.updateBooking(bookingId, { status: 'cancelled' });
+    await DataStore.updateBooking(bookingId, {
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelledBy: actor.by,
+      cancelledByRole: actor.role,
+      cancelledVia: actor.via,
+      cancelReason: reason.trim()
+    }, { action: 'cancelled', details: reason.trim(), ...actor });
     showToast('Booking cancelled.', 'info');
     if (isAdmin) loadAdminBookings();
     else lookupBooking();
@@ -1529,14 +1619,14 @@ async function loadAdminBookings() {
 
 async function confirmBookingAdmin(id) {
   if (staffBlocked()) return;
-  await DataStore.updateBooking(id, { status: 'confirmed' });
+  await DataStore.updateBooking(id, { status: 'confirmed' }, { action: 'confirmed', ...bookingActor(true) });
   showToast('Booking confirmed!', 'success');
   loadAdminBookings();
 }
 
 async function markDepositPaid(id) {
   if (staffBlocked()) return;
-  await DataStore.updateBooking(id, { depositPaid: true });
+  await DataStore.updateBooking(id, { depositPaid: true }, { action: 'deposit marked paid', ...bookingActor(true) });
   showToast('Deposit marked as paid', 'success');
   loadAdminBookings();
 }
@@ -1544,6 +1634,8 @@ async function markDepositPaid(id) {
 async function deleteBookingAdmin(id) {
   if (staffBlocked()) return;
   if (!confirm('Permanently delete this booking?')) return;
+  // Log first (the log outlives the booking); never block the delete on it
+  await DataStore.updateBooking(id, {}, { action: 'deleted', ...bookingActor(true) }).catch(e => console.warn('history:', e));
   await DataStore.deleteBooking(id);
   showToast('Booking deleted', 'info');
   loadAdminBookings();
@@ -3017,7 +3109,8 @@ async function processSquarePayment(containerId, amount, confirmCode, bookingId)
     if (!resp.ok || data.error) throw new Error(data.error || 'Payment failed');
 
     if (bookingId) {
-      await DataStore.updateBooking(bookingId, { depositPaid: true, squarePaymentId: data.paymentId || '' });
+      await DataStore.updateBooking(bookingId, { depositPaid: true, squarePaymentId: data.paymentId || '' },
+        { action: 'deposit paid by card', details: data.paymentId ? 'Square payment ' + data.paymentId : '', ...bookingActor(false, 'Square checkout') });
     }
     btn.style.display = 'none';
     status.style.color = 'var(--bamboo)';
@@ -4944,11 +5037,12 @@ async function renderAccountView() {
 
   wrap.innerHTML = '<p class="account-loading"><i class="fas fa-spinner fa-spin"></i> Gathering your Peachy Pals history…</p>';
   try {
-    const [bookings, waivers, memberships, linkedPhones] = await Promise.all([
+    // Waivers are admin-only in the database; a family may query just its own
+    const linkedPhones = await DataStore.getMemberLinkedPhones(user.uid).catch(() => []);
+    const [bookings, waivers, memberships] = await Promise.all([
       DataStore.getAllBookings(),
-      DataStore.getAllWaivers(),
-      DataStore.getAllMemberships(),
-      DataStore.getMemberLinkedPhones(user.uid).catch(() => [])
+      DataStore.getMyWaivers(user.uid, user.emailVerified ? user.email : '', linkedPhones),
+      DataStore.getAllMemberships()
     ]);
     if (currentMemberUser()?.uid !== user.uid) return;
 
@@ -5127,7 +5221,7 @@ function familyMembershipState(f) {
 
 function familyWaiverState(f) {
   const latest = [...f.waivers].sort((a, b) => (b.signedAt || b.createdAt || '').localeCompare(a.signedAt || a.createdAt || ''))[0];
-  if (!latest) return { key: 'none', label: 'No waiver on file' };
+  if (!latest) return isStaff() ? { key: 'none', label: 'Waiver status: admin only' } : { key: 'none', label: 'No waiver on file' };
   const exp = waiverExpiryDate(latest);
   return waiverIsValid(latest)
     ? { key: 'valid', label: `Waiver valid until ${formatRecordDate(exp.toISOString())} (${waiverCountdownText(latest)})` }
@@ -5138,7 +5232,7 @@ async function loadFamilyLookup(memberships) {
   try {
     const [bookings, waivers, setting, accounts] = await Promise.all([
       DataStore.getAllBookings(),
-      DataStore.getAllWaivers(),
+      isStaff() ? [] : DataStore.getAllWaivers(),  // admin-only data
       isStaff() ? null : DataStore.getSetting('membershipBackfill').catch(() => null),
       isStaff() ? [] : DataStore.getAllMemberAccounts().catch(() => [])
     ]);
@@ -5262,7 +5356,7 @@ function renderFamilyDetail() {
       <li>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))} — ${waiverIsValid(w) ? 'valid until ' + escapeHtml(formatRecordDate(waiverExpiryDate(w).toISOString())) : 'expired'}
         <span class="waiver-countdown ${waiverCountdownLevel(w)}">${waiverCountdownText(w)}</span>
         ${(w.children || []).length ? '· ' + (w.children || []).map(c => escapeHtml(c.name)).join(', ') : ''}</li>`).join('')
-    : '<li class="muted">None on file</li>';
+    : `<li class="muted">${isStaff() ? 'Waivers are visible to admins only' : 'None on file'}</li>`;
   const bookingRows = f.bookings.length ? sortDesc(f.bookings, 'date').map(b => `
       <li>${escapeHtml(formatRecordDate(b.date))} — ${escapeHtml(b.packageName || 'Party')} · ${escapeHtml(b.status || 'pending')} <span class="family-code">${escapeHtml(b.confirmationCode || '')}</span></li>`).join('')
     : '<li class="muted">None on file</li>';

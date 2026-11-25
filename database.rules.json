@@ -10,9 +10,18 @@
         }
       }
     },
+    "bookingHistory": {
+      ".read": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
+      "$bookingId": {
+        "$entryId": {
+          ".write": "!data.exists() && newData.exists()",
+          ".validate": "newData.hasChildren(['action', 'role', 'ts']) && newData.child('ts').val() == now && newData.parent().parent().parent().child('bookings').child($bookingId).exists() && (newData.child('role').val() == 'customer' || (newData.child('role').val() == 'admin' && auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true && newData.child('by').val() == auth.token.email))"
+        }
+      }
+    },
     "waivers": {
-      ".read": true,
-      ".indexOn": ["createdAt", "bookingId"],
+      ".read": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || (auth != null && query.orderByChild == 'ownerUid' && query.equalTo == auth.uid) || (auth != null && auth.token.email_verified == true && query.orderByChild == 'emailKey' && query.equalTo == auth.token.email.toLowerCase()) || (auth != null && query.orderByChild == 'phoneKey' && query.equalTo != null && root.child('members').child(auth.uid).child('linkedPhones').child(query.equalTo + '').exists())",
+      ".indexOn": ["createdAt", "bookingId", "ownerUid", "emailKey", "phoneKey"],
       "$id": {
         ".write": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || (!data.exists() && newData.exists())",
         "ownerUid": {
@@ -91,7 +100,14 @@
       ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       ".indexOn": ["createdAt"]
     },
-    "presence": { ".read": true, ".write": true, ".indexOn": ["startedAt"] },
-    "stats": { ".read": true, ".write": true }
+    "presence": {
+      ".read": true,
+      ".write": true,
+      ".indexOn": ["startedAt"]
+    },
+    "stats": {
+      ".read": true,
+      ".write": true
+    }
   }
 }

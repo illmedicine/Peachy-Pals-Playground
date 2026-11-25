@@ -1570,6 +1570,24 @@ input:disabled {
   background: #FFEBEE;
   color: #C62828;
 }
+/* Booking cancellation note + change history */
+.cancel-note {
+  margin: 0.75rem 0 0.25rem; padding: 0.6rem 0.85rem; border-radius: 10px;
+  background: #FFEBEE; color: #B71C1C; font-size: 0.9rem; line-height: 1.45;
+}
+.cancel-note.unknown { background: #F5F5F5; color: #616161; }
+.cancel-note .cancel-reason { margin-top: 0.25rem; font-style: italic; }
+.history-list { list-style: none; padding: 0; margin: 0; border-left: 3px solid var(--peach-light); }
+.history-entry { padding: 0.5rem 0 0.5rem 1rem; position: relative; font-size: 0.92rem; }
+.history-entry::before {
+  content: ''; position: absolute; left: -7px; top: 0.85rem; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--peach);
+}
+.history-entry.history-cancelled::before { background: #e53935; }
+.history-entry.history-confirmed::before, .history-entry.history-deposit::before { background: var(--bamboo); }
+.history-when { font-size: 0.78rem; color: var(--gray); }
+.history-details { font-size: 0.85rem; color: #555; margin-top: 0.15rem; }
+
 /* Days-left countdown to waiver expiry (12 months from signing) */
 .waiver-countdown {
   display: inline-block;
