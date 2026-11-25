@@ -103,6 +103,7 @@ function handleRoute() {
   if (view === 'post') loadCurrentPost();
   if (view === 'events') initEventsCalendar();
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
+  if (typeof maybeShowReturnOffer === 'function') maybeShowReturnOffer();
   if (view === 'account') renderAccountView();
   prefillFormsFromAccount();
 
@@ -742,6 +743,7 @@ async function submitBooking() {
     if (appliedPromo?.id) {
       try { await DataStore.incrementPromoUsage(appliedPromo.id); } catch(e) { console.warn('promo usage:', e); }
     }
+    lsSet('pp_has_booked', String(Date.now()));  // stop the returning-visitor offer on this device
     launchConfetti();
     showToast('Booking created successfully!', 'success');
 
@@ -1586,6 +1588,7 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminBlog') loadAdminBlog();
   if (tabId === 'adminEvents') loadAdminEvents();
   if (tabId === 'adminMembers') loadAdminMembers();
+  if (tabId === 'adminPosSales') loadAdminPosSales();
   if (tabId === 'adminPromos') loadAdminPromos();
   if (tabId === 'adminBirthdays') initBirthdayMarketing();
 }
@@ -3705,6 +3708,10 @@ async function init() {
 
   // Public deals banner + notifications (live-updates from the admin Promo Codes tab)
   initPromoBroadcast();
+
+  // Birthday offer for returning (not first-time) visitors
+  trackSiteVisit();
+  scheduleReturnOffer();
 
   initAdminAuthWatcher();
   initMemberAuthWatcher();
@@ -5980,6 +5987,113 @@ function queuePromoNotification() {
   }, 3500);
 }
 
+// ==========================================
+// RETURNING-VISITOR BIRTHDAY OFFER
+// Shown only to people coming back to the site (not first visits) who haven't
+// booked yet — parents still deciding on a party. Driven by a real promo code,
+// so it switches off by itself when the code is disabled, expires or is used up.
+// ==========================================
+const RETURN_OFFER = {
+  code: 'BIRTHDAY10',      // promo code created in Admin → Promo Codes
+  delayMs: 8000,           // wait a moment before interrupting
+  snoozeDays: 3,           // "Maybe later" hides it this long
+  newVisitGapMs: 30 * 60 * 1000  // 30+ minutes away = a new visit
+};
+let returnOfferPending = false;
+
+function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function lsSet(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+// Counts visits per browser: { first, last, count }
+function trackSiteVisit() {
+  let v = null;
+  try { v = JSON.parse(lsGet('pp_visits') || 'null'); } catch (e) {}
+  const now = Date.now();
+  if (!v || !v.count) v = { first: now, last: now, count: 1 };
+  else if (now - (v.last || 0) > RETURN_OFFER.newVisitGapMs) v.count += 1;
+  v.last = now;
+  lsSet('pp_visits', JSON.stringify(v));
+  // Keep "last seen" fresh so a long single visit isn't counted twice
+  window.addEventListener('pagehide', () => {
+    try { const cur = JSON.parse(lsGet('pp_visits')); cur.last = Date.now(); lsSet('pp_visits', JSON.stringify(cur)); } catch (e) {}
+  });
+  return v;
+}
+
+function isReturningVisitor() {
+  try { return (JSON.parse(lsGet('pp_visits') || '{}').count || 0) >= 2; } catch (e) { return false; }
+}
+
+function returnOfferPromo() {
+  const p = allPromoSnapshot.find(c => (c.code || '').toUpperCase() === RETURN_OFFER.code);
+  return p && getPromoStatus(p).key === 'active' && promoPct(p) >= 1 ? p : null;
+}
+
+function returnOfferBlocked() {
+  if (!isReturningVisitor()) return 'first visit';
+  if (lsGet('pp_has_booked')) return 'already booked';
+  if (lsGet('pp_return_offer_claimed') === RETURN_OFFER.code) return 'claimed';
+  if (Date.now() < parseInt(lsGet('pp_return_offer_snooze') || '0', 10)) return 'snoozed';
+  try { if (sessionStorage.getItem('pp_return_offer_shown')) return 'shown this visit'; } catch (e) {}
+  const user = currentMemberUser();
+  if (user && isAdminUser(user)) return 'admin';
+  return '';
+}
+
+function scheduleReturnOffer() {
+  if (returnOfferBlocked()) return;
+  setTimeout(() => { returnOfferPending = true; maybeShowReturnOffer(); }, RETURN_OFFER.delayMs);
+}
+
+// Also called on each page change, so a visitor who was mid-checkout or in admin sees it later
+function maybeShowReturnOffer() {
+  if (!returnOfferPending || returnOfferBlocked()) return;
+  if (['admin', 'booking', 'account'].includes(currentView)) return;
+  if (document.getElementById('modalOverlay')?.classList.contains('open')) {
+    setTimeout(maybeShowReturnOffer, 5000);
+    return;
+  }
+  if (allPromoSnapshot.length === 0) { setTimeout(maybeShowReturnOffer, 3000); return; }  // promos still loading
+  const p = returnOfferPromo();
+  if (!p) { returnOfferPending = false; return; }
+  returnOfferPending = false;
+  try { sessionStorage.setItem('pp_return_offer_shown', '1'); } catch (e) {}
+  const pct = promoPct(p);
+  openModal(`
+    <div class="return-offer">
+      <div class="return-offer-emoji" aria-hidden="true">🎂🐼🎈</div>
+      <h2>Welcome back!</h2>
+      <p class="return-offer-lead">Still planning a birthday party? Here's <strong>${pct}% off</strong> any birthday party package.</p>
+      <button type="button" class="return-offer-code" onclick="copyPromoCode('${p.code}')" title="Copy code">
+        <span>Your code</span> <strong>${p.code}</strong> <i class="far fa-copy"></i>
+      </button>
+      <p class="return-offer-ends"><i class="far fa-clock"></i> Offer ${escapeHtml(promoEndsText(p))}</p>
+      <button type="button" class="btn btn-primary btn-xl return-offer-cta" onclick="claimReturnOffer(true)">Book my party &amp; save ${pct}%</button>
+      <button type="button" class="link-btn return-offer-secondary" onclick="claimReturnOffer(false)">Compare party packages first</button>
+      <button type="button" class="link-btn return-offer-later" onclick="snoozeReturnOffer()">Maybe later</button>
+      <p class="return-offer-fine">Applied automatically at checkout. One code per booking.</p>
+    </div>`);
+}
+
+function claimReturnOffer(goBook) {
+  lsSet('pp_return_offer_claimed', RETURN_OFFER.code);
+  if (goBook) {
+    applyDealAndBook(RETURN_OFFER.code);
+  } else {
+    closeModal();
+    try { sessionStorage.setItem('pp_url_promo', RETURN_OFFER.code); } catch (e) {}
+    appliedPromo = null;
+    pendingUrlPromoCode = RETURN_OFFER.code;
+    showToast(`${RETURN_OFFER.code} saved — it'll apply automatically when you book 🎉`, 'success');
+    navigate('packages');
+  }
+}
+
+function snoozeReturnOffer() {
+  lsSet('pp_return_offer_snooze', String(Date.now() + RETURN_OFFER.snoozeDays * 86400000));
+  closeModal();
+}
+
 function renderCheckoutDealChips() {
   const wrap = document.getElementById('promoDealChips');
   if (!wrap) return;
@@ -6058,6 +6172,135 @@ function dismissInstallBanner() {
 
 // ==========================================
 // HERO IMAGE SLIDER
+// ==========================================
+// ADMIN: POS SALES (Square in-person reconciliation)
+// ==========================================
+let _allPosSales = [];
+
+async function loadAdminPosSales() {
+  const list = document.getElementById('adminPosSalesList');
+  const banner = document.getElementById('posStatsBanner');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--gray)">Loading…</p>';
+
+  try {
+    const resp = await fetch('https://peachypals.demarkuswilsone.workers.dev/pos-sales');
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Failed to load');
+
+    _allPosSales = data.payments || [];
+    renderPosSalesBanner(banner);
+    filterPosSales();
+  } catch (err) {
+    list.innerHTML = `<p style="color:var(--error)">Could not load POS sales: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderPosSalesBanner(banner) {
+  if (!banner || !_allPosSales.length) return;
+  const posTxns = _allPosSales.filter(p => p.source === 'square_pos');
+  const totalGross = posTxns.reduce((s, p) => s + (p.amountCents || 0), 0) / 100;
+  const matched = posTxns.filter(p => p.bookingId).length;
+  const unmatched = posTxns.length - matched;
+  const paidFull = posTxns.filter(p => p.paidInFull).length;
+
+  banner.style.display = 'grid';
+  banner.innerHTML = `
+    <div class="pos-stat"><span class="pos-stat-val">$${totalGross.toFixed(2)}</span><span class="pos-stat-lbl">POS Revenue (90d)</span></div>
+    <div class="pos-stat"><span class="pos-stat-val">${posTxns.length}</span><span class="pos-stat-lbl">Transactions</span></div>
+    <div class="pos-stat"><span class="pos-stat-val" style="color:var(--success)">${matched}</span><span class="pos-stat-lbl">Matched to Booking</span></div>
+    <div class="pos-stat"><span class="pos-stat-val" style="color:var(--warning)">${unmatched}</span><span class="pos-stat-lbl">Walk-in / Unmatched</span></div>
+    <div class="pos-stat"><span class="pos-stat-val" style="color:var(--success)">${paidFull}</span><span class="pos-stat-lbl">Paid in Full</span></div>
+  `;
+}
+
+function filterPosSales() {
+  const list = document.getElementById('adminPosSalesList');
+  if (!list || !_allPosSales.length) return;
+
+  const statusFilter = document.getElementById('posFilterStatus')?.value || 'all';
+  const searchVal = (document.getElementById('posSearch')?.value || '').toLowerCase();
+
+  let filtered = _allPosSales.filter(p => p.source === 'square_pos');
+
+  if (statusFilter === 'matched')   filtered = filtered.filter(p => p.bookingId);
+  if (statusFilter === 'unmatched') filtered = filtered.filter(p => !p.bookingId);
+  if (statusFilter === 'unpaid')    filtered = filtered.filter(p => p.bookingId && !p.paidInFull);
+
+  if (searchVal) {
+    filtered = filtered.filter(p =>
+      (p.customerName || '').toLowerCase().includes(searchVal) ||
+      (p.confirmationCode || '').toLowerCase().includes(searchVal) ||
+      (p.note || '').toLowerCase().includes(searchVal) ||
+      (p.cardLast4 || '').includes(searchVal)
+    );
+  }
+
+  if (!filtered.length) {
+    list.innerHTML = '<p style="color:var(--gray)">No transactions match this filter.</p>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(p => renderPosSaleCard(p)).join('');
+}
+
+function renderPosSaleCard(p) {
+  const dollars = (cents) => '$' + ((cents || 0) / 100).toFixed(2);
+  const dateStr = p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+  const isMatched = !!p.bookingId;
+  const depositDollars = p.depositPaid ? '$' + Number(p.depositPaid).toFixed(2) : null;
+  const totalDollars   = p.bookingTotal ? '$' + Number(p.bookingTotal).toFixed(2) : null;
+  const posAmount = dollars(p.amountCents);
+
+  let reconcile = '';
+  if (isMatched) {
+    const totalPaid = (p.depositPaid || 0) + ((p.amountCents || 0) / 100);
+    const remaining = p.bookingTotal ? Math.max(0, p.bookingTotal - totalPaid) : null;
+    reconcile = `
+      <div class="pos-reconcile">
+        <div class="pos-rec-row"><span>Online deposit</span><span>${depositDollars || '—'}</span></div>
+        <div class="pos-rec-row"><span>In-person payment</span><span>${posAmount}</span></div>
+        <div class="pos-rec-row pos-rec-total"><span>Total paid</span><span>$${totalPaid.toFixed(2)}</span></div>
+        ${totalDollars ? `<div class="pos-rec-row"><span>Booking total</span><span>${totalDollars}</span></div>` : ''}
+        ${remaining !== null ? `<div class="pos-rec-row ${remaining > 0 ? 'pos-rec-owed' : 'pos-rec-clear'}"><span>${remaining > 0 ? '⚠ Balance owed' : '✓ Paid in full'}</span><span>${remaining > 0 ? '$' + remaining.toFixed(2) : ''}</span></div>` : ''}
+      </div>`;
+  }
+
+  const matchBadge = isMatched
+    ? `<span class="pos-badge pos-badge-matched">Linked: ${escapeHtml(p.confirmationCode || 'booking')}</span>`
+    : `<span class="pos-badge pos-badge-walkin">Walk-in</span>`;
+
+  const statusBadge = p.paidInFull
+    ? `<span class="pos-badge pos-badge-paid">Paid in Full</span>`
+    : (isMatched ? `<span class="pos-badge pos-badge-partial">Balance Owed</span>` : '');
+
+  return `
+    <div class="admin-pos-card ${isMatched ? 'pos-matched' : 'pos-unmatched'}">
+      <div class="pos-card-header">
+        <div class="pos-card-left">
+          <span class="pos-amount">${posAmount}</span>
+          <span class="pos-date">${dateStr}</span>
+        </div>
+        <div class="pos-card-right">
+          ${matchBadge}
+          ${statusBadge}
+        </div>
+      </div>
+      ${isMatched ? `
+      <div class="pos-booking-info">
+        <strong>${escapeHtml(p.customerName || 'Guest')}</strong>
+        ${p.packageName ? `<span class="pos-pkg">${escapeHtml(p.packageName)}</span>` : ''}
+        ${p.bookingDate ? `<span class="pos-bdate">📅 ${formatDateDisplay(p.bookingDate)}</span>` : ''}
+      </div>` : ''}
+      ${p.note ? `<div class="pos-note">Note: ${escapeHtml(p.note)}</div>` : ''}
+      <div class="pos-card-footer">
+        <span class="pos-card-info">${p.cardBrand ? p.cardBrand + ' ' : ''}••••${p.cardLast4 || '—'}</span>
+        ${p.receiptUrl ? `<a href="${escapeHtml(p.receiptUrl)}" target="_blank" class="pos-receipt-link">View receipt ↗</a>` : ''}
+      </div>
+      ${reconcile}
+    </div>`;
+}
+
 // ==========================================
 (function initHeroSlider() {
   const slides = document.querySelectorAll('.hero-slide');

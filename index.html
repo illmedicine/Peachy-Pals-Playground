@@ -903,6 +903,7 @@
           <button class="admin-tab" data-tab="adminMembers" onclick="adminSwitchTab('adminMembers')"><i class="fas fa-id-card"></i> Members</button>
           <button class="admin-tab admin-only" data-tab="adminPromos" onclick="adminSwitchTab('adminPromos')"><i class="fas fa-tags"></i> Promo Codes</button>
           <button class="admin-tab admin-only" data-tab="adminBirthdays" onclick="adminSwitchTab('adminBirthdays')"><i class="fas fa-birthday-cake"></i> Birthday Marketing</button>
+          <button class="admin-tab admin-only" data-tab="adminPosSales" onclick="adminSwitchTab('adminPosSales')"><i class="fas fa-cash-register"></i> POS Sales</button>
           <button class="admin-tab admin-only" data-tab="adminBlog" onclick="adminSwitchTab('adminBlog')"><i class="fas fa-book-open"></i> Blog</button>
         </div>
 
@@ -1015,6 +1016,26 @@
             <input type="text" id="memberSearch" placeholder="Search by name, phone, or email..." oninput="filterMembers()" style="width:100%;max-width:400px">
           </div>
           <div id="adminMembersList" class="admin-members-list"><!-- JS --></div>
+        </div>
+
+        <!-- Admin: POS Sales -->
+        <div class="admin-panel" id="adminPosSales">
+          <div class="admin-panel-header">
+            <h2><i class="fas fa-cash-register"></i> POS Sales</h2>
+            <button class="btn btn-outline btn-sm" onclick="loadAdminPosSales()"><i class="fas fa-sync"></i> Refresh</button>
+          </div>
+          <p style="color:var(--gray);margin-bottom:1rem">In-person Square POS transactions from the last 90 days. Sales linked to an online booking show the full payment picture — deposit + balance = total.</p>
+          <div class="pos-filter-row" style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem">
+            <select id="posFilterStatus" onchange="filterPosSales()" style="padding:.4rem .75rem;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-card);color:var(--text-main)">
+              <option value="all">All transactions</option>
+              <option value="matched">Matched to booking</option>
+              <option value="unmatched">Walk-in / unmatched</option>
+              <option value="unpaid">Balance still owed</option>
+            </select>
+            <input type="text" id="posSearch" placeholder="Search name, code, note…" oninput="filterPosSales()" style="padding:.4rem .75rem;border:1px solid var(--border-color);border-radius:6px;background:var(--bg-card);color:var(--text-main);flex:1;min-width:180px">
+          </div>
+          <div id="posStatsBanner" class="pos-stats-banner" style="display:none"></div>
+          <div id="adminPosSalesList" class="admin-pos-list"><!-- JS --></div>
         </div>
 
         <!-- Admin: Promo Codes -->

@@ -1,0 +1,7 @@
+name = "peachypals"
+main = "square-worker.js"
+compatibility_date = "2024-01-18"
+
+[vars]
+FIREBASE_DB_URL = "https://project-e0e63e59-c7f9-4e5b-b6f-default-rtdb.firebaseio.com"
+SQUARE_API_URL  = "https://connect.squareup.com/v2"

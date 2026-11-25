@@ -2841,3 +2841,75 @@ body.promo-banner-on #toast-container { top: calc(var(--nav-height) + var(--prom
   .family-status { align-items: flex-start; }
   .account-header-card .btn { width: 100%; justify-content: center; }
 }
+
+/* Returning-visitor birthday offer */
+.return-offer { text-align: center; padding: 0.25rem 0.25rem 0; }
+.return-offer-emoji { font-size: 2.6rem; letter-spacing: 0.25rem; margin-bottom: 0.25rem; }
+.return-offer h2 { color: var(--peach-dark); font-size: 2rem; margin-bottom: 0.4rem; }
+.return-offer-lead { font-size: 1.05rem; line-height: 1.5; margin: 0 auto 1rem; max-width: 26rem; }
+.return-offer-code {
+  display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer;
+  background: var(--peach-lighter, #FFF3E0); border: 2px dashed var(--peach); border-radius: 12px;
+  padding: 0.55rem 1.1rem; font-family: var(--font-body); color: var(--dark, #333);
+}
+.return-offer-code span { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray); font-weight: 800; }
+.return-offer-code strong { font-family: var(--font-heading); font-size: 1.5rem; font-weight: 400; color: var(--peach-dark); letter-spacing: 0.06em; }
+.return-offer-ends { font-size: 0.85rem; color: var(--gray); margin: 0.6rem 0 1.1rem; }
+.return-offer-cta { width: 100%; max-width: 22rem; }
+.return-offer-secondary { display: block; margin: 0.85rem auto 0; font-size: 0.95rem; }
+.return-offer-later { display: block; margin: 0.6rem auto 0; color: var(--gray); font-weight: 600; }
+.return-offer-fine { font-size: 0.75rem; color: var(--gray); margin-top: 0.9rem; }
+
+/* ==========================================
+   ADMIN: POS SALES
+   ========================================== */
+.pos-stats-banner {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: .75rem;
+  background: var(--bg-alt, #fafafa);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+.pos-stat { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.pos-stat-val { font-size: 1.4rem; font-weight: 700; color: var(--peach-dark); }
+.pos-stat-lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--gray); margin-top: 2px; }
+
+.admin-pos-list { display: flex; flex-direction: column; gap: .85rem; }
+.admin-pos-card {
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  background: var(--bg-card);
+}
+.admin-pos-card.pos-matched { border-left: 4px solid var(--success, #2e7d32); }
+.admin-pos-card.pos-unmatched { border-left: 4px solid var(--warning, #f59e0b); }
+
+.pos-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.pos-card-left { display: flex; align-items: baseline; gap: .6rem; }
+.pos-amount { font-size: 1.3rem; font-weight: 700; color: var(--text-main); }
+.pos-date { font-size: .82rem; color: var(--gray); }
+.pos-card-right { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+.pos-badge { font-size: .72rem; font-weight: 700; padding: .2rem .55rem; border-radius: 20px; white-space: nowrap; }
+.pos-badge-matched  { background: #e8f5e9; color: #2e7d32; }
+.pos-badge-walkin   { background: #fff8e1; color: #b45309; }
+.pos-badge-paid     { background: #e8f5e9; color: #2e7d32; }
+.pos-badge-partial  { background: #fff3e0; color: #e65100; }
+
+.pos-booking-info { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .4rem; font-size: .9rem; }
+.pos-pkg   { background: var(--peach-lighter, #FFF3E0); color: var(--peach-dark); border-radius: 4px; padding: .15rem .45rem; font-size: .8rem; }
+.pos-bdate { color: var(--gray); font-size: .82rem; }
+.pos-note  { font-size: .82rem; color: var(--gray); margin-bottom: .4rem; font-style: italic; }
+
+.pos-card-footer { display: flex; justify-content: space-between; align-items: center; font-size: .82rem; color: var(--gray); border-top: 1px solid var(--border-color); padding-top: .5rem; margin-top: .5rem; }
+.pos-receipt-link { color: var(--peach-dark); text-decoration: none; font-weight: 600; }
+.pos-receipt-link:hover { text-decoration: underline; }
+
+.pos-reconcile { background: var(--bg-alt, #fafafa); border-radius: 8px; padding: .65rem .9rem; margin-top: .65rem; font-size: .85rem; }
+.pos-rec-row { display: flex; justify-content: space-between; padding: .15rem 0; color: var(--text-main); }
+.pos-rec-total { font-weight: 700; border-top: 1px solid var(--border-color); margin-top: .3rem; padding-top: .3rem; }
+.pos-rec-owed  { color: #e65100; font-weight: 600; }
+.pos-rec-clear { color: #2e7d32; font-weight: 600; }
