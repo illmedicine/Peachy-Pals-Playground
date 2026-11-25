@@ -3,9 +3,18 @@ name: Email Cherish on feat/fix push
 on:
   push:
     branches: [main]
-
-# One-off manual trigger, useful for testing after adding the SMTP secrets
-  workflow_dispatch: {}
+  # Manual run: Actions → this workflow → Run workflow. Fill "since" to send one
+  # summary of every change since that date; fill "to" to send it somewhere else.
+  workflow_dispatch:
+    inputs:
+      since:
+        description: 'Summarize every change since this date (YYYY-MM-DD). Leave blank to summarize the latest push.'
+        required: false
+        default: ''
+      to:
+        description: 'Send to (comma-separated emails). Leave blank for the usual recipients.'
+        required: false
+        default: ''
 
 jobs:
   notify:
@@ -13,12 +22,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so a "since" summary can look back
 
-      - name: Build email body from push event
+      - name: Build email body
         id: build
         env:
           OUT_HTML: /tmp/feature-email.html
           OUT_META: /tmp/feature-email.meta.json
+          SINCE: ${{ inputs.since }}
         run: |
           node .github/scripts/build-feature-email.mjs
           send=$(jq -r '.send' /tmp/feature-email.meta.json 2>/dev/null || echo false)
@@ -31,7 +43,7 @@ jobs:
             jq -r '.plainBody' /tmp/feature-email.meta.json > /tmp/feature-email.txt
           fi
 
-      - name: Send feature summary email
+      - name: Send summary email
         if: steps.build.outputs.send == 'true'
         uses: dawidd6/action-send-mail@v3
         with:
@@ -42,7 +54,7 @@ jobs:
           password: ${{ secrets.SMTP_PASS }}
           subject: ${{ steps.build.outputs.subject }}
           from: "Peachy Pals Dev Updates <${{ secrets.SMTP_FROM }}>"
-          to: ${{ vars.NOTIFY_TO || 'info@kdconcierge.com' }}
+          to: ${{ inputs.to || vars.NOTIFY_TO || secrets.NOTIFY_TO || 'info@kdconcierge.com' }}
           reply_to: ${{ vars.NOTIFY_REPLY_TO || secrets.SMTP_FROM }}
           html_body: file:///tmp/feature-email.html
           body: file:///tmp/feature-email.txt
