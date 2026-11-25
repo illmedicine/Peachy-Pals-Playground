@@ -4499,11 +4499,13 @@ function renderMembersList(members) {
           ${(m.monthlyRate || m.monthlyTotal) ? `<dt>Monthly:</dt><dd>$${m.monthlyRate || m.monthlyTotal}/mo</dd>` : ''}
           ${m.visitsPerMonth ? `<dt>Visits:</dt><dd>${m.visitsPerMonth}/child per month${m.weekdayOnly ? ' (weekdays only)' : ''}</dd>` : ''}
         </dl>
+        ${lastPlanChangeText(m) ? `<p class="plan-history"><i class="fas fa-exchange-alt"></i> ${escapeHtml(lastPlanChangeText(m))}</p>` : ''}
         ${isStaff() ? '' : `
         <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn btn-success btn-sm" onclick="setMemberStatus('${m.id}','active')">✓ Active</button>
           <button class="btn btn-outline btn-sm" onclick="setMemberStatus('${m.id}','pending')">Pending</button>
           <button class="btn btn-danger btn-sm" onclick="setMemberStatus('${m.id}','cancelled')">Cancel</button>
+          <button class="btn btn-outline btn-sm" onclick="openChangePlan('${m.id}')"><i class="fas fa-exchange-alt"></i> Change plan</button>
         </div>`}
       </div>`;
   }).join('');
@@ -4514,6 +4516,128 @@ async function setMemberStatus(id, status) {
   await DataStore.updateMembership(id, { status });
   showToast('Member status updated', 'success');
   loadAdminMembers();
+}
+
+// ==========================================
+// ADMIN: CHANGE A MEMBER'S PLAN (e.g. downgrades agreed at the front desk)
+// Admin only — Cherish confirms the change in Square before saving.
+// ==========================================
+let changePlanTarget = null;
+let changePlanRateTouched = false;
+
+function planHistoryOf(m) {
+  return Array.isArray(m.planHistory) ? m.planHistory : Object.values(m.planHistory || {});
+}
+
+function lastPlanChangeText(m) {
+  const last = planHistoryOf(m).slice(-1)[0];
+  if (!last) return '';
+  return `Changed ${formatRecordDate(last.effectiveDate || last.changedAt)}: ${last.fromPlan} ($${last.fromRate}/mo) → ${last.toPlan} ($${last.toRate}/mo)${last.note ? ' — ' + last.note : ''}`;
+}
+
+function membershipPlanKey(m) {
+  if (m.planType && MEMBERSHIP_PLANS[m.planType]) return m.planType;
+  return Object.keys(MEMBERSHIP_PLANS).find(k => MEMBERSHIP_PLANS[k].name === m.planName) || '';
+}
+
+function openChangePlan(membershipId) {
+  if (staffBlocked()) return;
+  const m = allMembersList.find(x => x.id === membershipId);
+  if (!m) { showToast('Could not find that membership. Refresh and try again.', 'error'); return; }
+  changePlanTarget = m;
+  changePlanRateTouched = false;
+  const currentKey = membershipPlanKey(m);
+  const kidCount = (m.children || []).length || 1;
+  const options = Object.entries(MEMBERSHIP_PLANS).map(([key, p]) => `
+    <label class="plan-option${key === currentKey ? ' current' : ''}">
+      <input type="radio" name="cpPlan" value="${key}"${key === currentKey ? ' checked' : ''}>
+      <span>
+        <strong>${escapeHtml(p.name)}</strong>${key === currentKey ? ' <em>(current)</em>' : ''}
+        <small>$${p.pricePerChild}/child/mo · ${escapeHtml(membershipVisitsText(p))} · ${escapeHtml(p.commitment)}</small>
+      </span>
+    </label>`).join('');
+  openModal(`
+    <h2><i class="fas fa-exchange-alt" style="color:var(--teal)"></i> Change Membership Plan</h2>
+    <p class="modal-hint"><strong>${escapeHtml(`${m.firstName || ''} ${m.lastName || ''}`.trim())}</strong> · ${kidCount} child${kidCount !== 1 ? 'ren' : ''} · currently <strong>${escapeHtml(m.planName || 'no plan set')}</strong>${m.monthlyRate ? ` at $${Number(m.monthlyRate) || 0}/mo` : ''}</p>
+    <form class="booking-form" onsubmit="return false" oninput="updateChangePlanRate()" onchange="updateChangePlanRate()">
+      <div class="plan-options">${options}</div>
+      <p class="modal-warning" id="cpAnnualWarning" hidden>⚠️ This member is on the Annual plan, which is a 12-month commitment. Only switch them if the early change was agreed with them.</p>
+      <div class="form-row">
+        <div class="form-group"><label>New monthly rate ($)</label><input type="number" id="cpRate" min="0" step="1" oninput="changePlanRateTouched = true"><small id="cpRateHint" class="muted"></small></div>
+        <div class="form-group"><label>Effective date</label><input type="date" id="cpDate" value="${formatDate(new Date())}"></div>
+      </div>
+      <div class="form-group"><label>Note <small class="muted">(optional)</small></label><input type="text" id="cpNote" maxlength="120" placeholder="e.g. Downgraded at the front desk"></div>
+      <label class="agreement-checkbox" style="margin-top:0.25rem">
+        <input type="checkbox" id="cpVerified">
+        <span>I've confirmed this plan and price in Square.</span>
+      </label>
+      <div class="step-nav" style="margin-top:1rem">
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="btnSaveChangePlan" onclick="saveChangePlan()"><i class="fas fa-save"></i> Save plan change</button>
+      </div>
+    </form>`);
+  updateChangePlanRate();
+}
+
+function updateChangePlanRate() {
+  const m = changePlanTarget;
+  const key = document.querySelector('input[name="cpPlan"]:checked')?.value;
+  const plan = MEMBERSHIP_PLANS[key];
+  const rateEl = document.getElementById('cpRate');
+  if (!m || !plan || !rateEl) return;
+  const kidCount = (m.children || []).length || 1;
+  const standard = plan.pricePerChild + Math.max(0, kidCount - 1) * plan.siblingFee;
+  if (!changePlanRateTouched) rateEl.value = standard;
+  document.getElementById('cpRateHint').textContent = `Standard price: $${standard}/mo for ${kidCount} child${kidCount !== 1 ? 'ren' : ''}`;
+  document.getElementById('cpAnnualWarning').hidden = !(membershipPlanKey(m) === 'annual' && key !== 'annual');
+  document.querySelectorAll('.plan-option').forEach(o => o.classList.toggle('selected', o.querySelector('input').checked));
+}
+
+async function saveChangePlan() {
+  if (staffBlocked()) return;
+  const m = changePlanTarget;
+  const key = document.querySelector('input[name="cpPlan"]:checked')?.value;
+  const plan = MEMBERSHIP_PLANS[key];
+  const rate = parseFloat(document.getElementById('cpRate').value);
+  const effectiveDate = document.getElementById('cpDate').value || formatDate(new Date());
+  const note = document.getElementById('cpNote').value.trim();
+  if (!m || !plan) { showToast('Please choose a plan', 'error'); return; }
+  if (isNaN(rate) || rate < 0) { showToast('Please enter the new monthly rate', 'error'); return; }
+  const fromPlan = m.planName || m.planType || 'No plan';
+  const fromRate = Number(m.monthlyRate) || 0;
+  if (plan.name === fromPlan && rate === fromRate) { showToast('Nothing changed — pick a different plan or rate', 'info'); return; }
+  if (!document.getElementById('cpVerified').checked) { showToast('Please confirm the change in Square first, then tick the box', 'error'); return; }
+
+  const btn = document.getElementById('btnSaveChangePlan');
+  btn.disabled = true;
+  const entry = {
+    fromPlan, toPlan: plan.name, fromRate, toRate: rate, effectiveDate, note,
+    verifiedInSquare: true,
+    changedBy: auth?.currentUser?.email || 'admin',
+    changedAt: new Date().toISOString()
+  };
+  try {
+    await DataStore.updateMembership(m.id, {
+      planType: key,
+      planName: plan.name,
+      pricePerChild: plan.pricePerChild,
+      siblingFee: plan.siblingFee,
+      commitment: plan.commitment,
+      visitsPerMonth: plan.visitsPerMonth || null,
+      weekdayOnly: !!plan.weekdayOnly,
+      monthlyRate: rate,
+      totalTermCost: key === 'annual' ? rate * 12 : null,
+      planChangedAt: effectiveDate,
+      planHistory: [...planHistoryOf(m), entry]
+    });
+    closeModal();
+    showToast(`${m.firstName || 'Member'} is now on ${plan.name} ($${rate}/mo)`, 'success');
+    loadAdminMembers();
+  } catch (e) {
+    console.error('change plan:', e);
+    showToast('Could not save the plan change. Make sure you\'re signed in as an admin.', 'error');
+    btn.disabled = false;
+  }
 }
 
 // ==========================================
@@ -4976,7 +5100,9 @@ function renderFamilyDetail() {
 
   const membershipRows = f.memberships.length ? sortDesc(f.memberships, 'startDate').map(m => `
       <li><strong>${escapeHtml(m.planName || 'Membership')}</strong> — ${escapeHtml(m.status || 'pending')} · since ${escapeHtml(formatRecordDate(membershipStartDate(m)))}
-        ${m.source === 'in-person' ? '<span class="fr-badge inperson">In-person</span>' : ''} <span class="family-code">${escapeHtml(m.membershipCode || '')}</span></li>`).join('')
+        ${m.source === 'in-person' ? '<span class="fr-badge inperson">In-person</span>' : ''} <span class="family-code">${escapeHtml(m.membershipCode || '')}</span>
+        ${lastPlanChangeText(m) ? `<div class="plan-history">${escapeHtml(lastPlanChangeText(m))}</div>` : ''}
+        ${admin && m.id ? `<button class="link-btn" onclick="openChangePlan('${m.id}')">Change plan</button>` : ''}</li>`).join('')
     : '<li class="muted">None on file</li>';
   const waiverRows = f.waivers.length ? sortDesc(f.waivers, 'signedAt').map(w => `
       <li>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))} — ${waiverIsValid(w) ? 'valid until ' + escapeHtml(formatRecordDate(w.expiresAt)) : 'expired'}
