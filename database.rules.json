@@ -4,9 +4,9 @@
       ".read": true,
       ".indexOn": ["createdAt", "date"],
       "$id": {
-        ".write": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || newData.exists()",
+        ".write": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || newData.exists()",
         "ownerUid": {
-          ".validate": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || newData.val() === data.val() || (!data.parent().exists() && auth != null && newData.val() === auth.uid)"
+          ".validate": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || newData.val() === data.val() || (!data.parent().exists() && auth != null && newData.val() === auth.uid)"
         }
       }
     },
@@ -14,9 +14,9 @@
       ".read": true,
       ".indexOn": ["createdAt", "bookingId"],
       "$id": {
-        ".write": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || (!data.exists() && newData.exists())",
+        ".write": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || (!data.exists() && newData.exists())",
         "ownerUid": {
-          ".validate": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || newData.val() === data.val() || (!data.parent().exists() && auth != null && newData.val() === auth.uid)"
+          ".validate": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || newData.val() === data.val() || (!data.parent().exists() && auth != null && newData.val() === auth.uid)"
         }
       }
     },
@@ -24,71 +24,71 @@
       ".read": true,
       ".indexOn": ["createdAt"],
       "$id": {
-        ".write": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || (!data.exists() && newData.exists())",
+        ".write": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || (!data.exists() && newData.exists())",
         "ownerUid": {
-          ".validate": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || newData.val() === data.val() || (!data.parent().exists() && auth != null && newData.val() === auth.uid)"
+          ".validate": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || newData.val() === data.val() || (!data.parent().exists() && auth != null && newData.val() === auth.uid)"
         }
       }
     },
     "members": {
-      ".read": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".read": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
         "profile": {
-          ".write": "auth != null && (auth.uid === $uid || (auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true))",
+          ".write": "auth != null && (auth.uid === $uid || ((auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true))",
           "email": {
-            ".validate": "(auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || newData.val() === auth.token.email"
+            ".validate": "((auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || newData.val() === auth.token.email"
           }
         },
         "linkedPhones": {
-          ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true"
+          ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true"
         }
       }
     },
     "settings": {
       ".read": true,
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true"
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true"
     },
     "blockedDates": {
       ".read": true,
       ".indexOn": ["date"],
       "$id": {
-        ".write": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || (newData.exists() && newData.child('blocked').val() === true)"
+        ".write": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || (newData.exists() && newData.child('blocked').val() === true)"
       }
     },
     "promoCodes": {
       ".read": true,
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       "$id": {
         "usageCount": {
           ".write": "data.parent().exists()",
-          ".validate": "(auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true) || (newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1)"
+          ".validate": "(auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true) || (newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1)"
         }
       }
     },
     "packages": {
       ".read": true,
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       ".indexOn": ["sortOrder"]
     },
     "services": {
       ".read": true,
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       ".indexOn": ["sortOrder"]
     },
     "posts": {
       ".read": true,
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       ".indexOn": ["publishDate"]
     },
     "events": {
       ".read": true,
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       ".indexOn": ["createdAt"]
     },
     "notifications": {
-      ".read": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
-      ".write": "auth != null && auth.token.email == 'info@kdconcierge.com' && auth.token.email_verified == true",
+      ".read": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
+      ".write": "auth != null && (auth.token.email == 'info@kdconcierge.com' || auth.token.email == 'demarkuswilsone@gmail.com') && auth.token.email_verified == true",
       ".indexOn": ["createdAt"]
     },
     "presence": { ".read": true, ".write": true, ".indexOn": ["startedAt"] },

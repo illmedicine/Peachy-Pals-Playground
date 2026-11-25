@@ -6,8 +6,10 @@
 // CONFIGURATION
 // ==========================================
 const CONFIG = {
-  // The only account with admin access. Must match the email in database.rules.json and storage.rules.
+  // Official admin account (used for the email + password sign-in and password resets)
   adminEmail: 'info@kdconcierge.com',
+  // Every account with full admin access. Must match the emails in database.rules.json and storage.rules.
+  adminEmails: ['info@kdconcierge.com', 'demarkuswilsone@gmail.com'],
   // Staff PINs — view-only access to Bookings, Waivers and Members. Code → staff name.
   staffCodes: {
     '0007': 'Staff'
@@ -1205,7 +1207,7 @@ async function cancelBooking(bookingId, isAdmin) {
 let adminAuthMode = 'signin'; // 'signin' | 'setup'
 
 function isAdminUser(user) {
-  return !!user && (user.email || '').toLowerCase() === CONFIG.adminEmail.toLowerCase();
+  return !!user && CONFIG.adminEmails.includes((user.email || '').toLowerCase());
 }
 
 function showAdminLogin() {
@@ -1336,7 +1338,7 @@ async function adminGoogleLogin() {
     const cred = await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
     if (!isAdminUser(cred.user)) {
       await auth.signOut();
-      showAdminAuthError(`That Google account isn't the Peachy Pals admin account (${CONFIG.adminEmail}).`);
+      showAdminAuthError('That Google account doesn\'t have Peachy Pals admin access.');
       return;
     }
     if (!cred.user.emailVerified) { showAdminVerifyPane(); return; }
