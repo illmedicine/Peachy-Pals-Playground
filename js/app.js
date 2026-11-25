@@ -6,7 +6,8 @@
 // CONFIGURATION
 // ==========================================
 const CONFIG = {
-  adminCode: '4931',
+  // The only account with admin access. Must match the email in database.rules.json and storage.rules.
+  adminEmail: 'info@kdconcierge.com',
   // Staff PINs — view-only access to Bookings, Waivers and Members. Code → staff name.
   staffCodes: {
     '0007': 'Staff'
@@ -75,7 +76,7 @@ function navigate(view) {
 
 function handleRoute() {
   const hash = window.location.hash.slice(1) || 'home';
-  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin', 'blog', 'post', 'about', 'events'];
+  const validViews = ['home', 'packages', 'booking', 'manage', 'memberships', 'waiver', 'admin', 'blog', 'post', 'about', 'events', 'account'];
   const view = validViews.includes(hash) ? hash : 'home';
 
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -99,6 +100,8 @@ function handleRoute() {
   if (view === 'post') loadCurrentPost();
   if (view === 'events') initEventsCalendar();
   if (view === 'admin' && !isAdminLoggedIn) showAdminLogin();
+  if (view === 'account') renderAccountView();
+  prefillFormsFromAccount();
 
   // Deals banner is hidden inside the admin dashboard
   renderPromoBanner();
@@ -685,6 +688,7 @@ async function submitBooking() {
     subtotal: t.subtotal,
     taxAmount: t.tax,
     marketingOptIn: !!document.getElementById('bkMarketingOptIn')?.checked,
+    ...ownerStamp(),
     status: 'pending',
     depositPaid: false,
     depositAmount: t.deposit,
@@ -1196,19 +1200,223 @@ async function cancelBooking(bookingId, isAdmin) {
 // ==========================================
 // ADMIN PORTAL
 // ==========================================
+// Admin signs in with Firebase Auth (the database only accepts admin changes from this
+// verified account). Staff keep the view-only PIN.
+let adminAuthMode = 'signin'; // 'signin' | 'setup'
+
+function isAdminUser(user) {
+  return !!user && (user.email || '').toLowerCase() === CONFIG.adminEmail.toLowerCase();
+}
+
 function showAdminLogin() {
   document.getElementById('adminLogin').style.display = 'flex';
   document.getElementById('adminDashboard').style.display = 'none';
-  document.getElementById('adminError').style.display = 'none';
-  ['adminPin1', 'adminPin2', 'adminPin3', 'adminPin4'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('adminPin1').focus();
+  const user = auth?.currentUser;
+  if (isAdminUser(user)) {
+    if (user.emailVerified) { enterAdminDashboard('admin'); return; }
+    showAdminVerifyPane();
+    return;
+  }
+  setLoginMode('admin');
+}
+
+function setLoginMode(mode) {
+  document.querySelectorAll('.login-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+  document.getElementById('adminEmailPane').hidden = mode !== 'admin';
+  document.getElementById('adminVerifyPane').hidden = true;
+  document.getElementById('staffPinPane').hidden = mode !== 'staff';
+  if (mode === 'admin') {
+    setAdminAuthMode('signin');
+    document.getElementById('adminEmail').value = CONFIG.adminEmail;
+    document.getElementById('adminPassword').focus();
+  } else {
+    document.getElementById('adminError').style.display = 'none';
+    ['adminPin1', 'adminPin2', 'adminPin3', 'adminPin4'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('adminPin1').focus();
+  }
+}
+
+function setAdminAuthMode(mode) {
+  adminAuthMode = mode;
+  const setup = mode === 'setup';
+  document.getElementById('adminPasswordConfirmWrap').hidden = !setup;
+  document.getElementById('adminPassword').autocomplete = setup ? 'new-password' : 'current-password';
+  document.getElementById('adminPassword').value = '';
+  document.getElementById('adminPasswordConfirm').value = '';
+  document.getElementById('btnAdminSignIn').innerHTML = setup
+    ? '<i class="fas fa-key"></i> Create Admin Password'
+    : '<i class="fas fa-sign-in-alt"></i> Sign In';
+  document.getElementById('btnToggleSetup').textContent = setup ? 'Back to sign in' : 'First time? Create the admin password';
+  document.getElementById('btnForgotPassword').hidden = setup;
+  document.getElementById('adminLoginHint').textContent = setup
+    ? 'Choose a password for the admin account (at least 8 characters). We\'ll email a link to confirm it\'s you.'
+    : 'Sign in with the official Peachy Pals admin account.';
+  showAdminAuthError('');
+}
+
+function toggleAdminSetup() {
+  setAdminAuthMode(adminAuthMode === 'setup' ? 'signin' : 'setup');
+  document.getElementById('adminPassword').focus();
+}
+
+function showAdminAuthError(message) {
+  const el = document.getElementById('adminAuthError');
+  el.textContent = message;
+  el.hidden = !message;
+}
+
+function adminAuthErrorMessage(e) {
+  const code = e?.code || '';
+  if (['auth/invalid-credential', 'auth/invalid-login-credentials', 'auth/wrong-password', 'auth/user-not-found'].includes(code)) {
+    return 'That password isn\'t right. Try again, or use "Forgot password?". First time here? Use "Create the admin password".';
+  }
+  const messages = {
+    'auth/popup-blocked': 'Your browser blocked the sign-in window. Allow pop-ups for this site and try again.',
+    'auth/unauthorized-domain': 'This website address isn\'t approved for sign-in yet (Firebase → Authentication → Settings → Authorized domains).',
+    'auth/account-exists-with-different-credential': 'This email already signs in a different way. Use that method instead.',
+    'auth/too-many-requests': 'Too many attempts. Wait a few minutes, or reset your password.',
+    'auth/operation-not-allowed': 'This sign-in method isn\'t switched on yet in Firebase (Authentication → Sign-in method).',
+    'auth/email-already-in-use': 'The admin password has already been created. Sign in instead, or use "Forgot password?".',
+    'auth/weak-password': 'Please choose a password with at least 8 characters.',
+    'auth/network-request-failed': 'No internet connection. Please check it and try again.'
+  };
+  return messages[code] || 'Something went wrong signing in. Please try again.';
+}
+
+async function adminEmailLogin() {
+  if (!auth) { showAdminAuthError('Sign-in is unavailable right now. Please refresh and try again.'); return; }
+  const password = document.getElementById('adminPassword').value;
+  const btn = document.getElementById('btnAdminSignIn');
+  const setup = adminAuthMode === 'setup';
+  if (setup) {
+    if (password.length < 8) { showAdminAuthError('Please choose a password with at least 8 characters.'); return; }
+    if (password !== document.getElementById('adminPasswordConfirm').value) { showAdminAuthError('The two passwords don\'t match.'); return; }
+  } else if (!password) {
+    showAdminAuthError('Please enter your password.');
+    return;
+  }
+
+  showAdminAuthError('');
+  const idleLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (setup ? 'Creating…' : 'Signing in…');
+  try {
+    // Admin sign-in ends when the tab closes — the front-desk device is shared with staff
+    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+    if (setup) {
+      const cred = await auth.createUserWithEmailAndPassword(CONFIG.adminEmail, password);
+      await cred.user.sendEmailVerification();
+      showAdminVerifyPane();
+      showToast(`Admin password created. Check ${CONFIG.adminEmail} for the verification link.`, 'success');
+      return;
+    }
+    const cred = await auth.signInWithEmailAndPassword(CONFIG.adminEmail, password);
+    if (!isAdminUser(cred.user)) {
+      await auth.signOut();
+      showAdminAuthError('This account doesn\'t have admin access.');
+      return;
+    }
+    if (!cred.user.emailVerified) { showAdminVerifyPane(); return; }
+    enterAdminDashboard('admin');
+  } catch (e) {
+    showAdminAuthError(adminAuthErrorMessage(e));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = idleLabel;
+    document.getElementById('adminPassword').value = '';
+    document.getElementById('adminPasswordConfirm').value = '';
+  }
+}
+
+async function adminGoogleLogin() {
+  if (!auth) { showAdminAuthError('Sign-in is unavailable right now. Please refresh and try again.'); return; }
+  showAdminAuthError('');
+  try {
+    await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+    const cred = await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    if (!isAdminUser(cred.user)) {
+      await auth.signOut();
+      showAdminAuthError(`That Google account isn't the Peachy Pals admin account (${CONFIG.adminEmail}).`);
+      return;
+    }
+    if (!cred.user.emailVerified) { showAdminVerifyPane(); return; }
+    enterAdminDashboard('admin');
+  } catch (e) {
+    if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') return;
+    showAdminAuthError(adminAuthErrorMessage(e));
+  }
+}
+
+async function adminForgotPassword() {
+  if (!auth) return;
+  try {
+    await auth.sendPasswordResetEmail(CONFIG.adminEmail);
+    showToast(`Password reset link sent to ${CONFIG.adminEmail}`, 'success');
+  } catch (e) {
+    showAdminAuthError(adminAuthErrorMessage(e));
+  }
+}
+
+function showAdminVerifyPane() {
+  document.querySelectorAll('.login-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === 'admin'));
+  document.getElementById('adminEmailPane').hidden = true;
+  document.getElementById('staffPinPane').hidden = true;
+  document.getElementById('adminVerifyPane').hidden = false;
+  document.getElementById('adminVerifyEmail').textContent = CONFIG.adminEmail;
+}
+
+async function adminCheckVerified() {
+  const user = auth?.currentUser;
+  if (!user) { setLoginMode('admin'); return; }
+  try {
+    await user.reload();
+    if (!auth.currentUser.emailVerified) {
+      showToast('Not verified yet — open the link in the email first, then try again.', 'error');
+      return;
+    }
+    // Refresh the token so the database sees the verified email straight away
+    await auth.currentUser.getIdToken(true);
+    enterAdminDashboard('admin');
+  } catch (e) {
+    showToast(adminAuthErrorMessage(e), 'error');
+  }
+}
+
+async function adminSendVerification() {
+  const user = auth?.currentUser;
+  if (!user) { setLoginMode('admin'); return; }
+  try {
+    await user.sendEmailVerification();
+    showToast(`Verification link sent to ${CONFIG.adminEmail}`, 'success');
+  } catch (e) {
+    showToast(adminAuthErrorMessage(e), 'error');
+  }
+}
+
+async function adminCancelVerify() {
+  if (auth) await auth.signOut();
+  setLoginMode('admin');
+}
+
+// Restores the admin dashboard after a page reload within the same tab
+function initAdminAuthWatcher() {
+  if (!auth) return;
+  auth.onAuthStateChanged(user => {
+    if (isAdminUser(user) && user.emailVerified) {
+      if (currentView === 'admin' && !isAdminLoggedIn) enterAdminDashboard('admin');
+    } else if (adminRole === 'admin') {
+      isAdminLoggedIn = false;
+      adminRole = null;
+      if (currentView === 'admin') showAdminLogin();
+    }
+  });
 }
 
 function pinNext(el, idx) {
   if (el.value.length === 1 && idx < 4) {
     document.getElementById('adminPin' + (idx + 1)).focus();
   }
-  if (idx === 4 && el.value.length === 1) adminLogin();
+  if (idx === 4 && el.value.length === 1) staffPinLogin();
 }
 
 function pinBack(e, el, idx) {
@@ -1217,26 +1425,11 @@ function pinBack(e, el, idx) {
   }
 }
 
-function adminLogin() {
+function staffPinLogin() {
   const code = ['adminPin1', 'adminPin2', 'adminPin3', 'adminPin4'].map(id => document.getElementById(id).value).join('');
   const staffName = CONFIG.staffCodes[code];
-  if (code === CONFIG.adminCode || staffName) {
-    isAdminLoggedIn = true;
-    adminRole = staffName ? 'staff' : 'admin';
-    document.getElementById('adminLogin').style.display = 'none';
-    const dash = document.getElementById('adminDashboard');
-    dash.style.display = 'block';
-    dash.classList.toggle('staff-mode', isStaff());
-    document.getElementById('adminDashTitle').innerHTML = isStaff()
-      ? '<i class="fas fa-user"></i> Staff Portal'
-      : '<i class="fas fa-cog"></i> Admin Dashboard';
-    adminSwitchTab('adminBookings');
-    if (!isStaff()) {
-      loadAdminPackages();
-      loadAdminNotifications();
-      loadAdminEvents();
-    }
-    showToast(`Welcome, ${staffName || 'Admin'}!`, 'success');
+  if (staffName) {
+    enterAdminDashboard('staff', staffName);
   } else {
     document.getElementById('adminError').style.display = 'block';
     ['adminPin1', 'adminPin2', 'adminPin3', 'adminPin4'].forEach(id => document.getElementById(id).value = '');
@@ -1244,10 +1437,35 @@ function adminLogin() {
   }
 }
 
-function adminLogout() {
+function enterAdminDashboard(role, staffName) {
+  // Sign-in fires both the button handler and the auth listener
+  if (isAdminLoggedIn && adminRole === role) return;
+  isAdminLoggedIn = true;
+  adminRole = role;
+  document.getElementById('adminLogin').style.display = 'none';
+  const dash = document.getElementById('adminDashboard');
+  dash.style.display = 'block';
+  dash.classList.toggle('staff-mode', isStaff());
+  document.getElementById('adminDashTitle').innerHTML = isStaff()
+    ? '<i class="fas fa-user"></i> Staff Portal'
+    : '<i class="fas fa-cog"></i> Admin Dashboard';
+  adminSwitchTab('adminBookings');
+  if (!isStaff()) {
+    loadAdminPackages();
+    loadAdminNotifications();
+    loadAdminEvents();
+  }
+  showToast(`Welcome, ${staffName || 'Admin'}!`, 'success');
+}
+
+async function adminLogout() {
+  const wasAdmin = adminRole === 'admin';
   isAdminLoggedIn = false;
   adminRole = null;
   document.getElementById('adminDashboard').classList.remove('staff-mode');
+  if (wasAdmin && auth) {
+    try { await auth.signOut(); } catch (e) { console.warn('signOut:', e); }
+  }
   navigate('home');
   showToast('Logged out', 'info');
 }
@@ -2058,6 +2276,7 @@ async function submitMembership() {
     totalTermCost: selectedMembershipPlan === 'annual' ? monthlyTotal * 12 : null,
     paymentMethod: 'square',
     agreedToTerms: true,
+    ...ownerStamp(),
     status: 'pending',
     createdAt: new Date().toISOString()
   };
@@ -2348,6 +2567,7 @@ async function submitWaiver() {
     bookingDate: selectedWaiverBooking?.date || null,
     bookingPackage: selectedWaiverBooking?.packageName || null,
     marketingOptIn: !!document.getElementById('wvMarketingOptIn')?.checked,
+    ...ownerStamp(),
     status: 'active'
   };
 
@@ -3271,6 +3491,9 @@ async function init() {
 
   // Public deals banner + notifications (live-updates from the admin Promo Codes tab)
   initPromoBroadcast();
+
+  initAdminAuthWatcher();
+  initMemberAuthWatcher();
 }
 
 // ==========================================
@@ -4226,13 +4449,15 @@ let allMembersList = [];
 async function loadAdminMembers() {
   allMembersList = await DataStore.getAllMemberships();
   renderMembersList(allMembersList);
+  loadFamilyLookup(allMembersList);
 }
 
 function filterMembers() {
   const q = (document.getElementById('memberSearch')?.value || '').toLowerCase();
+  const digits = q.replace(/\D/g, '');
   const filtered = q ? allMembersList.filter(m =>
     (m.firstName + ' ' + m.lastName).toLowerCase().includes(q) ||
-    (m.phone || '').includes(q) ||
+    (digits.length >= 3 && phoneKey(m.phone).includes(digits)) ||
     (m.email || '').toLowerCase().includes(q)
   ) : allMembersList;
   renderMembersList(filtered);
@@ -4247,7 +4472,7 @@ function renderMembersList(members) {
   }
   list.innerHTML = members.map(m => {
     const children = (m.children || []).map(c => escapeHtml(c.name) + (c.age ? ' (Age ' + c.age + ')' : '')).join(', ');
-    const joined = m.createdAt ? new Date(m.createdAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : 'N/A';
+    const joined = formatRecordDate(membershipStartDate(m)) || 'N/A';
     const statusColor = m.status === 'active' ? 'var(--bamboo)' : m.status === 'cancelled' ? '#e53935' : 'var(--peach)';
     return `
       <div class="admin-member-card">
@@ -4255,6 +4480,8 @@ function renderMembersList(members) {
           <div>
             <h3>${escapeHtml(m.firstName || '')} ${escapeHtml(m.lastName || '')}</h3>
             <span style="font-size:0.8rem;font-weight:700;color:${statusColor};text-transform:uppercase">${m.status || 'pending'}</span>
+            ${m.source === 'in-person' ? '<span class="fr-badge inperson">Joined in person</span>' : ''}
+            ${m.ownerUid ? '<span class="fr-badge member">My Account</span>' : ''}
           </div>
           <div style="text-align:right;font-size:0.8rem;color:var(--gray)">
             <div>${escapeHtml(m.planName || m.planType || '')}</div>
@@ -4285,6 +4512,763 @@ async function setMemberStatus(id, status) {
   await DataStore.updateMembership(id, { status });
   showToast('Member status updated', 'success');
   loadAdminMembers();
+}
+
+// ==========================================
+// SHARED: PHONE + RECORD HELPERS
+// ==========================================
+// Records store phones in whatever format was typed; compare on 10 digits
+function phoneKey(phone) {
+  let d = String(phone || '').replace(/\D/g, '');
+  if (d.length === 11 && d.startsWith('1')) d = d.slice(1);
+  return d.length >= 7 ? d : '';
+}
+
+function formatPhoneKey(key) {
+  return key && key.length === 10 ? `(${key.slice(0, 3)}) ${key.slice(3, 6)}-${key.slice(6)}` : (key || '');
+}
+
+function formatRecordDate(value) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return formatShortDate(value);
+  const d = new Date(value);
+  return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function membershipStartDate(m) {
+  return m.startDate || m.createdAt || '';
+}
+
+function waiverIsValid(w) {
+  return !!w.expiresAt && new Date(w.expiresAt) > new Date();
+}
+
+function ageInYears(birthMonth, birthYear) {
+  if (!birthMonth || !birthYear) return null;
+  const now = new Date();
+  let years = now.getFullYear() - birthYear;
+  if (now.getMonth() + 1 < birthMonth) years -= 1;
+  return years >= 0 ? years : null;
+}
+
+function childLabel(c) {
+  if (c.birthMonth && c.birthYear) return `${c.name} (born ${MONTH_NAMES[c.birthMonth - 1].slice(0, 3)} ${c.birthYear})`;
+  if (c.age || c.age === 0) return `${c.name} (age ${c.age})`;
+  return c.name;
+}
+
+const MEMBERSHIP_STATE_UI = {
+  active: { icon: '✅', label: 'Active member' },
+  pending: { icon: '⏳', label: 'Pending approval' },
+  cancelled: { icon: '⛔', label: 'Membership ended' },
+  none: { icon: '➖', label: 'Not a member' }
+};
+
+const GOOGLE_ICON_SVG = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+
+// ==========================================
+// FAMILY ACCOUNTS (Google sign-in) + MY ACCOUNT PAGE
+// ==========================================
+function currentMemberUser() {
+  return auth?.currentUser || null;
+}
+
+// New bookings/waivers/memberships made while a family is signed in are tied to their account.
+// Not when the admin is signed in — Cherish may be entering something for a customer.
+function ownerStamp() {
+  const user = currentMemberUser();
+  return user && !isAdminUser(user) ? { ownerUid: user.uid } : {};
+}
+
+function accountIdFor(uid) {
+  return String(uid || '').slice(0, 8).toUpperCase();
+}
+
+async function memberGoogleSignIn() {
+  if (!auth) { showToast('Sign-in is unavailable right now. Please refresh and try again.', 'error'); return; }
+  try {
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const cred = await auth.signInWithPopup(provider);
+    // The admin account never stays signed in after the tab closes (shared front-desk device)
+    if (isAdminUser(cred.user)) await auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);
+    const first = (cred.user.displayName || '').split(' ')[0];
+    showToast(`Welcome${first ? ', ' + first : ''}! 🐼`, 'success');
+  } catch (e) {
+    if (e?.code === 'auth/popup-closed-by-user' || e?.code === 'auth/cancelled-popup-request') return;
+    showToast(adminAuthErrorMessage(e), 'error');
+  }
+}
+
+async function memberSignOut() {
+  if (!auth) return;
+  await auth.signOut();
+  showToast('Signed out', 'info');
+}
+
+function initMemberAuthWatcher() {
+  if (!auth) return;
+  auth.onAuthStateChanged(user => {
+    updateAccountNav(user);
+    if (user && !isAdminUser(user)) {
+      DataStore.ensureMemberProfile(user).catch(e => console.warn('member profile:', e));
+    }
+    if (currentView === 'account') renderAccountView();
+    prefillFormsFromAccount();
+  });
+}
+
+function updateAccountNav(user) {
+  const btn = document.getElementById('navAccountBtn');
+  if (!btn) return;
+  const photo = user ? safeImageUrl(user.photoURL) : '';
+  btn.innerHTML = photo ? `<img src="${photo}" alt="" referrerpolicy="no-referrer">` : '<i class="fas fa-user-circle"></i>';
+  btn.classList.toggle('signed-in', !!user);
+}
+
+// Fills name + email on the booking, waiver and membership forms (empty fields only)
+function prefillFormsFromAccount() {
+  const user = currentMemberUser();
+  if (!user || isAdminUser(user)) return;
+  const [first, ...rest] = (user.displayName || '').trim().split(/\s+/);
+  const fill = (id, value) => {
+    const el = document.getElementById(id);
+    if (el && !el.value && value) el.value = value;
+  };
+  ['bk', 'wv', 'mem'].forEach(prefix => {
+    fill(prefix + 'FirstName', first);
+    fill(prefix + 'LastName', rest.join(' '));
+    fill(prefix + 'Email', user.email);
+  });
+}
+
+async function renderAccountView() {
+  const wrap = document.getElementById('accountContent');
+  if (!wrap) return;
+  const user = currentMemberUser();
+  if (!user) {
+    wrap.innerHTML = `
+      <div class="account-signin-card">
+        <div class="login-panda" aria-hidden="true">🐼</div>
+        <h2>Sign in to your family account</h2>
+        <ul class="account-perks">
+          <li>✅ Check your membership status</li>
+          <li>📝 See the waivers you've signed and when they expire</li>
+          <li>🎉 View your upcoming and past party bookings</li>
+        </ul>
+        <button type="button" class="btn-google btn-google-lg" onclick="memberGoogleSignIn()">${GOOGLE_ICON_SVG} Continue with Google</button>
+        <p class="account-privacy"><i class="fas fa-lock"></i> We only use your name and email to find your Peachy Pals records. We never post to your Google account.</p>
+      </div>`;
+    return;
+  }
+
+  wrap.innerHTML = '<p class="account-loading"><i class="fas fa-spinner fa-spin"></i> Gathering your Peachy Pals history…</p>';
+  try {
+    const [bookings, waivers, memberships, linkedPhones] = await Promise.all([
+      DataStore.getAllBookings(),
+      DataStore.getAllWaivers(),
+      DataStore.getAllMemberships(),
+      DataStore.getMemberLinkedPhones(user.uid).catch(() => [])
+    ]);
+    if (currentMemberUser()?.uid !== user.uid) return;
+
+    const email = (user.email || '').toLowerCase();
+    const phones = new Set(linkedPhones);
+    const isMine = r => r.ownerUid === user.uid
+      || (email && (r.email || '').trim().toLowerCase() === email)
+      || (phoneKey(r.phone) && phones.has(phoneKey(r.phone)));
+
+    const statusRank = { active: 0, pending: 1, cancelled: 2 };
+    const myMemberships = memberships.filter(isMine)
+      .sort((a, b) => (statusRank[a.status || 'pending'] - statusRank[b.status || 'pending']) || membershipStartDate(b).localeCompare(membershipStartDate(a)));
+    const myWaivers = waivers.filter(isMine)
+      .sort((a, b) => (b.signedAt || b.createdAt || '').localeCompare(a.signedAt || a.createdAt || ''));
+    const myBookings = bookings.filter(isMine);
+    wrap.innerHTML = renderAccountPortal(user, myMemberships, myWaivers, myBookings);
+  } catch (e) {
+    console.warn('account view:', e);
+    wrap.innerHTML = '<div class="account-section"><p>We couldn\'t load your history just now. <button class="link-btn" onclick="renderAccountView()">Try again</button></p></div>';
+  }
+}
+
+function renderAccountPortal(user, memberships, waivers, bookings) {
+  const first = (user.displayName || '').split(' ')[0] || 'there';
+  const photo = safeImageUrl(user.photoURL);
+  const today = formatDate(new Date());
+
+  const membershipHtml = memberships.length === 0 ? `
+      <div class="account-empty">
+        <p>You don't have a membership on file yet.</p>
+        <button class="btn btn-primary btn-sm" onclick="navigate('memberships')"><i class="fas fa-id-card"></i> See membership plans</button>
+        <p class="account-note">Joined at the front desk? Ask us to connect it to your account — show them the card below.</p>
+      </div>` : memberships.map(m => {
+      const state = MEMBERSHIP_STATE_UI[m.status || 'pending'] || MEMBERSHIP_STATE_UI.pending;
+      const kids = (m.children || []).map(c => escapeHtml(c.name)).filter(Boolean).join(', ');
+      const plan = Object.values(MEMBERSHIP_PLANS).find(p => p.name === m.planName);
+      return `
+        <div class="account-membership-card status-${escapeHtml(m.status || 'pending')}">
+          <div class="amc-status">${state.icon} ${state.label}</div>
+          <h4>${escapeHtml(m.planName || 'Membership')}</h4>
+          <p>Member since ${escapeHtml(formatRecordDate(membershipStartDate(m)))}${m.monthlyRate ? ` · $${Number(m.monthlyRate) || 0}/month` : ''}</p>
+          ${plan ? `<p>${escapeHtml(membershipVisitsText(plan))}</p>` : ''}
+          ${kids ? `<p><i class="fas fa-child"></i> ${kids}</p>` : ''}
+          ${(m.status || 'pending') === 'pending' ? '<p class="account-note">Our team will confirm your membership within 24 hours.</p>' : ''}
+        </div>`;
+    }).join('');
+
+  const hasValidWaiver = waivers.some(waiverIsValid);
+  const waiverHtml = (waivers.length === 0 ? '<p class="account-empty-line">No waivers on file yet.</p>' : waivers.map(w => {
+    const valid = waiverIsValid(w);
+    const kids = (w.children || []).map(c => escapeHtml(c.name)).filter(Boolean).join(', ');
+    return `
+      <div class="account-row">
+        <div>
+          <strong>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))}</strong>
+          ${kids ? `<div class="account-row-sub"><i class="fas fa-child"></i> ${kids}</div>` : ''}
+        </div>
+        <span class="status-pill ${valid ? 'status-active' : 'status-expired'}">${valid ? 'Valid until ' + escapeHtml(formatRecordDate(w.expiresAt)) : 'Expired'}</span>
+      </div>`;
+  }).join('')) + (hasValidWaiver ? '' : '<button class="btn btn-primary btn-sm account-cta" onclick="navigate(\'waiver\')"><i class="fas fa-file-signature"></i> Sign a waiver</button>');
+
+  const upcoming = bookings.filter(b => b.date >= today && b.status !== 'cancelled').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const past = bookings.filter(b => !(b.date >= today && b.status !== 'cancelled')).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const bookingRow = b => `
+      <div class="account-row">
+        <div>
+          <strong>${escapeHtml(b.packageName || 'Party')}</strong> · ${escapeHtml(formatRecordDate(b.date))}${b.timeSlot ? ' at ' + escapeHtml(b.timeSlot) : ''}
+          <div class="account-row-sub">${b.childName ? '🎂 ' + escapeHtml(b.childName) + ' · ' : ''}Confirmation ${escapeHtml(b.confirmationCode || '—')}${b.status !== 'cancelled' ? (b.depositPaid ? ' · Deposit paid' : ' · Deposit due') : ''}</div>
+        </div>
+        <span class="status-pill booking-status status-${b.status === 'confirmed' ? 'active' : b.status === 'cancelled' ? 'expired' : 'scheduled'}">${escapeHtml(b.status || 'pending')}</span>
+      </div>`;
+  const bookingHtml = `
+      ${upcoming.length ? upcoming.map(bookingRow).join('') : '<p class="account-empty-line">No upcoming parties.</p>'}
+      ${past.length ? `<details class="account-past"><summary>Past & cancelled parties (${past.length})</summary>${past.map(bookingRow).join('')}</details>` : ''}
+      <div class="account-cta-row">
+        <button class="btn btn-primary btn-sm" onclick="navigate('booking')"><i class="fas fa-birthday-cake"></i> Book a party</button>
+        <button class="btn btn-outline btn-sm" onclick="navigate('manage')"><i class="fas fa-clipboard-list"></i> Manage a booking</button>
+      </div>`;
+
+  return `
+    <div class="account-header-card">
+      ${photo ? `<img class="account-avatar" src="${photo}" alt="" referrerpolicy="no-referrer">` : '<div class="account-avatar">🐼</div>'}
+      <div class="account-hello">
+        <h2>Hi, ${escapeHtml(first)}!</h2>
+        <p>${escapeHtml(user.email || '')}</p>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="memberSignOut()"><i class="fas fa-sign-out-alt"></i> Sign out</button>
+    </div>
+    ${isAdminUser(user) ? '<p class="account-note account-admin-note">You\'re signed in as the Peachy Pals admin. <button class="link-btn" onclick="navigate(\'admin\')">Open the Admin Dashboard</button></p>' : ''}
+    <div class="account-grid">
+      <section class="account-section account-membership"><h3>🎋 Membership</h3>${membershipHtml}</section>
+      <section class="account-section"><h3>📝 Waivers</h3>${waiverHtml}</section>
+      <section class="account-section account-bookings"><h3>🎉 Party Bookings</h3>${bookingHtml}</section>
+      <section class="account-section account-help">
+        <h3>🐼 Missing something?</h3>
+        <p>We match your records by the email on your Google account. Anything saved under a different email or only your phone number can be connected at the front desk — just show them this card.</p>
+        <div class="account-id-card">
+          <div><span>Name</span><strong>${escapeHtml(user.displayName || '—')}</strong></div>
+          <div><span>Email</span><strong>${escapeHtml(user.email || '—')}</strong></div>
+          <div><span>Account ID</span><strong class="account-id">${accountIdFor(user.uid)}</strong></div>
+        </div>
+      </section>
+    </div>`;
+}
+
+// ==========================================
+// ADMIN: FIND A FAMILY + IN-PERSON BACKFILL + ACCOUNT LINKING
+// ==========================================
+let familyIndex = [];
+let familyResults = [];
+let familyActiveIdx = -1;
+let selectedFamily = null;
+let familyAccounts = [];          // Google-signed-in family accounts (admin only)
+let familyBackfillEnabled = true; // settings/membershipBackfill — Cherish switches it off when done
+
+function buildFamilyIndex(bookings, waivers, memberships) {
+  const map = new Map();
+  const clean = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  const familyFor = r => {
+    const pk = phoneKey(r.phone);
+    const em = (r.email || '').trim().toLowerCase();
+    const key = pk || (em ? 'email:' + em : '');
+    if (!key) return null;
+    if (!map.has(key)) {
+      map.set(key, { key, phoneKey: pk, phone: formatPhoneKey(pk), names: new Map(), emails: new Set(), children: new Map(), bookings: [], waivers: [], memberships: [] });
+    }
+    const f = map.get(key);
+    const full = `${r.firstName || ''} ${r.lastName || ''}`.trim();
+    if (full) f.names.set(full.toLowerCase(), full);
+    if (em) f.emails.add(em);
+    return f;
+  };
+  const addChild = (f, name, info) => {
+    const n = String(name || '').trim();
+    if (!n) return;
+    const k = n.toLowerCase();
+    f.children.set(k, { ...(f.children.get(k) || { name: n }), ...clean(info) });
+  };
+  waivers.forEach(w => {
+    const f = familyFor(w);
+    if (!f) return;
+    f.waivers.push(w);
+    (w.children || []).forEach(c => addChild(f, c.name, { birthMonth: c.birthMonth, birthYear: c.birthYear }));
+  });
+  memberships.forEach(m => {
+    const f = familyFor(m);
+    if (!f) return;
+    f.memberships.push(m);
+    (m.children || []).forEach(c => addChild(f, c.name, { age: c.age, birthMonth: c.birthMonth, birthYear: c.birthYear }));
+  });
+  bookings.forEach(b => {
+    const f = familyFor(b);
+    if (!f) return;
+    f.bookings.push(b);
+    addChild(f, b.childName, { birthMonth: b.childBirthMonth, birthYear: b.childBirthYear });
+  });
+
+  const lastName = f => (f.displayName.split(' ').slice(-1)[0] || '').toLowerCase();
+  return [...map.values()].map(f => {
+    f.displayName = [...f.names.values()][0] || '(no name on file)';
+    f.membershipState = familyMembershipState(f);
+    f.waiverState = familyWaiverState(f);
+    return f;
+  }).sort((a, b) => lastName(a).localeCompare(lastName(b)) || a.displayName.localeCompare(b.displayName));
+}
+
+function familyMembershipState(f) {
+  const ms = [...f.memberships].sort((a, b) => membershipStartDate(b).localeCompare(membershipStartDate(a)));
+  const pick = status => ms.find(m => (m.status || 'pending') === status);
+  const m = pick('active') || pick('pending') || ms[0];
+  if (!m) return { key: 'none', ...MEMBERSHIP_STATE_UI.none };
+  const key = m.status || 'pending';
+  const ui = MEMBERSHIP_STATE_UI[key] || MEMBERSHIP_STATE_UI.pending;
+  return { key, icon: ui.icon, label: key === 'active' ? `Active — ${m.planName || 'Member'}` : ui.label, membership: m };
+}
+
+function familyWaiverState(f) {
+  const latest = [...f.waivers].sort((a, b) => (b.signedAt || b.createdAt || '').localeCompare(a.signedAt || a.createdAt || ''))[0];
+  if (!latest) return { key: 'none', label: 'No waiver on file' };
+  return waiverIsValid(latest)
+    ? { key: 'valid', label: `Waiver valid until ${formatRecordDate(latest.expiresAt)}` }
+    : { key: 'expired', label: `Waiver expired ${formatRecordDate(latest.expiresAt)}` };
+}
+
+async function loadFamilyLookup(memberships) {
+  try {
+    const [bookings, waivers, setting, accounts] = await Promise.all([
+      DataStore.getAllBookings(),
+      DataStore.getAllWaivers(),
+      isStaff() ? null : DataStore.getSetting('membershipBackfill').catch(() => null),
+      isStaff() ? [] : DataStore.getAllMemberAccounts().catch(() => [])
+    ]);
+    familyBackfillEnabled = setting?.enabled !== false;
+    familyAccounts = accounts;
+    familyIndex = buildFamilyIndex(bookings, waivers, memberships);
+  } catch (e) {
+    console.warn('family lookup:', e);
+  }
+  renderBackfillPanel();
+  if (selectedFamily) {
+    selectedFamily = familyIndex.find(f => f.key === selectedFamily.key) || null;
+    renderFamilyDetail();
+  }
+  if (document.activeElement?.id === 'familySearch') renderFamilyResults();
+}
+
+function familyMatches(f, query) {
+  if (!query) return true;
+  const digits = query.replace(/\D/g, '');
+  if (digits.length >= 3 && f.phoneKey.includes(digits)) return true;
+  const t = query.toLowerCase();
+  return [...f.names.keys()].some(n => n.includes(t))
+    || [...f.emails].some(e => e.includes(t))
+    || [...f.children.keys()].some(c => c.includes(t));
+}
+
+function familyBadges(f) {
+  const m = f.membershipState.key;
+  return `${m === 'active' ? '<span class="fr-badge member">Member</span>' : m === 'pending' ? '<span class="fr-badge pending">Pending</span>' : ''}${f.waiverState.key === 'valid' ? '<span class="fr-badge waiver">Waiver</span>' : ''}`;
+}
+
+function renderFamilyResults() {
+  const input = document.getElementById('familySearch');
+  const box = document.getElementById('familyResults');
+  if (!input || !box) return;
+  const query = input.value.trim();
+  familyResults = familyIndex.filter(f => familyMatches(f, query));
+  familyActiveIdx = -1;
+  const shown = familyResults.slice(0, 200);
+  const header = query
+    ? `${familyResults.length} match${familyResults.length !== 1 ? 'es' : ''}`
+    : `All families on file (${familyIndex.length}) — keep typing to narrow it down`;
+  box.innerHTML = `<div class="family-results-head">${escapeHtml(header)}</div>` + (shown.length
+    ? shown.map((f, i) => `
+        <button type="button" role="option" class="family-result" data-idx="${i}" onmousedown="event.preventDefault()" onclick="selectFamily(${i})">
+          <span class="fr-phone">${escapeHtml(f.phone || 'No phone')}</span>
+          <span class="fr-name">${escapeHtml(f.displayName)}</span>
+          <span class="fr-badges">${familyBadges(f)}</span>
+        </button>`).join('')
+    : `<div class="family-result-empty">${familyIndex.length ? 'No family matches that search.' : 'Loading families…'}</div>`);
+  box.hidden = false;
+  if (!input._blurBound) {
+    input._blurBound = true;
+    input.addEventListener('blur', () => setTimeout(() => { box.hidden = true; }, 120));
+  }
+}
+
+function familySearchKey(e) {
+  const box = document.getElementById('familyResults');
+  const items = box ? [...box.querySelectorAll('.family-result')] : [];
+  if (e.key === 'Escape') { box.hidden = true; return; }
+  if (!items.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    familyActiveIdx = (familyActiveIdx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    items.forEach((el, i) => el.classList.toggle('active', i === familyActiveIdx));
+    items[familyActiveIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    selectFamily(familyActiveIdx >= 0 ? familyActiveIdx : 0);
+  }
+}
+
+function selectFamily(idx) {
+  const f = familyResults[idx];
+  if (!f) return;
+  selectedFamily = f;
+  const input = document.getElementById('familySearch');
+  input.value = f.phone || f.displayName;
+  document.getElementById('familyResults').hidden = true;
+  input.blur();
+  renderFamilyDetail();
+}
+
+function linkedAccountsFor(f) {
+  return familyAccounts
+    .map(a => ({
+      ...a,
+      byPhone: !!f.phoneKey && (a.linkedPhones || []).includes(f.phoneKey),
+      byEmail: f.emails.has((a.email || '').toLowerCase())
+    }))
+    .filter(a => a.byPhone || a.byEmail);
+}
+
+function renderFamilyDetail() {
+  const wrap = document.getElementById('familyDetail');
+  if (!wrap) return;
+  const f = selectedFamily;
+  if (!f) { wrap.innerHTML = ''; return; }
+  const admin = !isStaff();
+  const ms = f.membershipState;
+  const kids = [...f.children.values()].map(c => escapeHtml(childLabel(c))).join(', ');
+  const sortDesc = (arr, field) => [...arr].sort((a, b) => (b[field] || b.createdAt || '').localeCompare(a[field] || a.createdAt || ''));
+
+  const membershipRows = f.memberships.length ? sortDesc(f.memberships, 'startDate').map(m => `
+      <li><strong>${escapeHtml(m.planName || 'Membership')}</strong> — ${escapeHtml(m.status || 'pending')} · since ${escapeHtml(formatRecordDate(membershipStartDate(m)))}
+        ${m.source === 'in-person' ? '<span class="fr-badge inperson">In-person</span>' : ''} <span class="family-code">${escapeHtml(m.membershipCode || '')}</span></li>`).join('')
+    : '<li class="muted">None on file</li>';
+  const waiverRows = f.waivers.length ? sortDesc(f.waivers, 'signedAt').map(w => `
+      <li>Signed ${escapeHtml(formatRecordDate(w.signedAt || w.createdAt))} — ${waiverIsValid(w) ? 'valid until ' + escapeHtml(formatRecordDate(w.expiresAt)) : 'expired'}
+        ${(w.children || []).length ? '· ' + (w.children || []).map(c => escapeHtml(c.name)).join(', ') : ''}</li>`).join('')
+    : '<li class="muted">None on file</li>';
+  const bookingRows = f.bookings.length ? sortDesc(f.bookings, 'date').map(b => `
+      <li>${escapeHtml(formatRecordDate(b.date))} — ${escapeHtml(b.packageName || 'Party')} · ${escapeHtml(b.status || 'pending')} <span class="family-code">${escapeHtml(b.confirmationCode || '')}</span></li>`).join('')
+    : '<li class="muted">None on file</li>';
+
+  const linked = admin ? linkedAccountsFor(f) : [];
+  const accountsHtml = admin ? `
+    <div class="family-accounts">
+      <strong><i class="fas fa-user-circle"></i> Family account:</strong>
+      ${linked.length ? linked.map(a => `${escapeHtml(a.name || a.email || 'Account')} (${escapeHtml(a.email || '')}) — ${a.byPhone ? 'linked by phone' : 'matched by email'}`).join('; ') : '<span class="muted">Not signed up for My Account yet</span>'}
+    </div>` : '';
+
+  wrap.innerHTML = `
+    <div class="family-card">
+      <div class="family-card-head">
+        <div>
+          <h3>${[...f.names.values()].map(escapeHtml).join(' · ') || escapeHtml(f.displayName)}</h3>
+          <div class="family-contact">
+            ${f.phone ? `<a href="tel:${f.phoneKey}"><i class="fas fa-phone"></i> ${escapeHtml(f.phone)}</a>` : ''}
+            ${[...f.emails].map(e => `<span><i class="fas fa-envelope"></i> ${escapeHtml(e)}</span>`).join('')}
+          </div>
+          ${kids ? `<div class="family-kids"><i class="fas fa-child"></i> ${kids}</div>` : ''}
+        </div>
+        <div class="family-status">
+          <span class="status-pill member-${ms.key}">${ms.icon} ${escapeHtml(ms.label)}</span>
+          <span class="status-pill waiver-${f.waiverState.key}">📝 ${escapeHtml(f.waiverState.label)}</span>
+        </div>
+      </div>
+      <div class="family-sections">
+        <div><h4>Memberships</h4><ul>${membershipRows}</ul></div>
+        <div><h4>Waivers</h4><ul>${waiverRows}</ul></div>
+        <div><h4>Party bookings</h4><ul>${bookingRows}</ul></div>
+      </div>
+      ${accountsHtml}
+      ${admin ? `
+      <div class="family-actions">
+        ${familyBackfillEnabled ? '<button class="btn btn-primary btn-sm" onclick="openBackfillMembership()"><i class="fas fa-plus"></i> Add in-person membership</button>' : ''}
+        ${f.phoneKey ? '<button class="btn btn-outline btn-sm" onclick="openLinkAccount()"><i class="fas fa-link"></i> Link to a family account</button>' : ''}
+      </div>` : ''}
+    </div>`;
+}
+
+function renderBackfillPanel() {
+  const panel = document.getElementById('backfillPanel');
+  if (!panel) return;
+  if (isStaff()) { panel.innerHTML = ''; return; }
+  panel.innerHTML = familyBackfillEnabled ? `
+    <div class="backfill-panel">
+      <div>
+        <h3>🐼 Adding in-person members <span class="pill-temp">Temporary</span></h3>
+        <p>For families who joined at the front desk before online sign-up. Find the family above, then click <strong>Add in-person membership</strong>. Once everyone's entered, switch this off — new members join online from now on.</p>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="setBackfillEnabled(false)"><i class="fas fa-check"></i> Done adding in-person members</button>
+    </div>` : `
+    <p class="backfill-off">In-person member backfill is switched off. <button class="link-btn" onclick="setBackfillEnabled(true)">Turn it back on</button></p>`;
+}
+
+async function setBackfillEnabled(enabled) {
+  if (staffBlocked()) return;
+  if (!enabled && !confirm('Hide the in-person membership tool? You can turn it back on later from this tab.')) return;
+  try {
+    await DataStore.setSetting('membershipBackfill', { enabled, updatedAt: new Date().toISOString() });
+    familyBackfillEnabled = enabled;
+    renderBackfillPanel();
+    renderFamilyDetail();
+    showToast(enabled ? 'In-person backfill turned back on' : 'In-person backfill switched off', 'success');
+  } catch (e) {
+    console.warn('backfill setting:', e);
+    showToast('Could not save that change. Make sure you\'re signed in as the admin.', 'error');
+  }
+}
+
+let backfillKids = [];
+let backfillRateTouched = false;
+
+function openBackfillMembership() {
+  if (staffBlocked()) return;
+  const f = selectedFamily;
+  if (!f) return;
+  const nameParts = f.names.size ? [...f.names.values()][0].split(' ') : [];
+  const today = formatDate(new Date());
+  backfillKids = [...f.children.values()];
+  backfillRateTouched = false;
+  const planOptions = Object.entries(MEMBERSHIP_PLANS)
+    .map(([key, p]) => `<option value="${key}">${escapeHtml(p.name)} — $${p.pricePerChild}/child/mo</option>`).join('');
+  openModal(`
+    <h2>🐼 Add In-Person Membership</h2>
+    <p class="modal-hint">For a family who signed up at the front desk. They'll be saved as an <strong>active</strong> member — no card is charged and no email is sent.</p>
+    ${f.membershipState.key === 'active' ? `<p class="modal-warning">⚠️ This family already has an active membership (${escapeHtml(f.membershipState.membership.planName || '')}). Only continue if this is a separate membership.</p>` : ''}
+    <form class="booking-form" id="backfillForm" onsubmit="return false" oninput="updateBackfillRate()" onchange="updateBackfillRate()">
+      <div class="form-row">
+        <div class="form-group"><label>Plan *</label><select id="bfPlan">${planOptions}</select></div>
+        <div class="form-group"><label>Joined on *</label><input type="date" id="bfStart" value="${today}" max="${today}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Parent First Name *</label><input type="text" id="bfFirst" value="${escapeHtml(nameParts[0] || '')}"></div>
+        <div class="form-group"><label>Parent Last Name *</label><input type="text" id="bfLast" value="${escapeHtml(nameParts.slice(1).join(' '))}"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Phone *</label><input type="tel" id="bfPhone" value="${escapeHtml(f.phone)}"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="bfEmail" value="${escapeHtml([...f.emails][0] || '')}"></div>
+      </div>
+      <div class="form-group">
+        <label>Children on this membership *</label>
+        <div class="bf-kids">
+          ${backfillKids.length ? backfillKids.map((c, i) => `<label class="bf-kid"><input type="checkbox" class="bf-kid-check" value="${i}" checked> ${escapeHtml(childLabel(c))}</label>`).join('') : '<p class="muted">No children on file yet — add them below.</p>'}
+          <div id="bfExtraKids"></div>
+          <button type="button" class="link-btn" onclick="addBackfillChild()">+ Add a child who isn't listed</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Monthly rate ($)</label><input type="number" id="bfRate" min="0" step="1" oninput="backfillRateTouched = true"><small id="bfRateHint" class="muted"></small></div>
+        <div class="form-group"><label>How they pay</label>
+          <select id="bfPay">
+            <option>Paid in person</option>
+            <option>Card on file at front desk</option>
+            <option>Cash or check</option>
+            <option>Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Notes <small class="muted">(optional)</small></label><textarea id="bfNotes" rows="2" placeholder="e.g. Paper agreement signed at the desk on 9/14"></textarea></div>
+      <div class="step-nav" style="margin-top:1rem">
+        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="btnSaveBackfill" onclick="saveBackfillMembership()"><i class="fas fa-save"></i> Add Membership</button>
+      </div>
+    </form>`);
+  if (!backfillKids.length) addBackfillChild();
+  updateBackfillRate();
+}
+
+function addBackfillChild() {
+  const wrap = document.getElementById('bfExtraKids');
+  if (!wrap) return;
+  wrap.insertAdjacentHTML('beforeend', `
+    <div class="bf-extra-kid">
+      <input type="text" class="bf-extra-name" placeholder="Child's name">
+      <input type="number" class="bf-extra-age" min="0" max="17" placeholder="Age">
+      <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); updateBackfillRate()" aria-label="Remove child">&times;</button>
+    </div>`);
+}
+
+function readBackfillChildren() {
+  const kids = [...document.querySelectorAll('.bf-kid-check:checked')].map(cb => {
+    const c = backfillKids[parseInt(cb.value)];
+    const years = ageInYears(c.birthMonth, c.birthYear);
+    const age = years ?? (c.age !== undefined && c.age !== '' ? Number(c.age) : null);
+    return { name: c.name, age, birthMonth: c.birthMonth || null, birthYear: c.birthYear || null };
+  });
+  document.querySelectorAll('.bf-extra-kid').forEach(row => {
+    const name = row.querySelector('.bf-extra-name').value.trim();
+    const ageVal = row.querySelector('.bf-extra-age').value;
+    if (name) kids.push({ name, age: ageVal === '' ? null : parseInt(ageVal) });
+  });
+  return kids;
+}
+
+function updateBackfillRate() {
+  const plan = MEMBERSHIP_PLANS[document.getElementById('bfPlan')?.value];
+  const rateEl = document.getElementById('bfRate');
+  if (!plan || !rateEl) return;
+  const count = readBackfillChildren().length;
+  const standard = plan.pricePerChild + Math.max(0, count - 1) * plan.siblingFee;
+  if (!backfillRateTouched) rateEl.value = standard;
+  document.getElementById('bfRateHint').textContent = `Standard price: $${standard}/mo for ${count} child${count !== 1 ? 'ren' : ''}`;
+}
+
+async function saveBackfillMembership() {
+  if (staffBlocked()) return;
+  const planType = document.getElementById('bfPlan').value;
+  const plan = MEMBERSHIP_PLANS[planType];
+  const firstName = document.getElementById('bfFirst').value.trim();
+  const lastName = document.getElementById('bfLast').value.trim();
+  const phone = document.getElementById('bfPhone').value.trim();
+  const startDate = document.getElementById('bfStart').value;
+  const children = readBackfillChildren();
+  const monthlyRate = parseFloat(document.getElementById('bfRate').value);
+  if (!firstName || !lastName) { showToast('Please enter the parent\'s first and last name', 'error'); return; }
+  if (!phoneKey(phone)) { showToast('Please enter a valid phone number', 'error'); return; }
+  if (!startDate) { showToast('Please enter the date they joined', 'error'); return; }
+  if (!children.length) { showToast('Please choose or add at least one child', 'error'); return; }
+  if (isNaN(monthlyRate) || monthlyRate < 0) { showToast('Please enter the monthly rate', 'error'); return; }
+
+  const btn = document.getElementById('btnSaveBackfill');
+  btn.disabled = true;
+  try {
+    const result = await DataStore.createMembership({
+      planType,
+      planName: plan.name,
+      firstName,
+      lastName,
+      phone,
+      email: document.getElementById('bfEmail').value.trim(),
+      address: '',
+      children,
+      numberOfSiblings: Math.max(0, children.length - 1),
+      monthlyRate,
+      pricePerChild: plan.pricePerChild,
+      siblingFee: plan.siblingFee,
+      commitment: plan.commitment,
+      visitsPerMonth: plan.visitsPerMonth || null,
+      weekdayOnly: !!plan.weekdayOnly,
+      totalTermCost: planType === 'annual' ? monthlyRate * 12 : null,
+      paymentMethod: 'in-person',
+      paymentNote: document.getElementById('bfPay').value,
+      notes: document.getElementById('bfNotes').value.trim(),
+      agreedToTerms: true,
+      agreementOnFile: 'In person at the front desk',
+      status: 'active',
+      source: 'in-person',
+      startDate
+    });
+    closeModal();
+    showToast(`Membership added for ${firstName} ${lastName} (${result.membershipCode})`, 'success');
+    loadAdminMembers();
+  } catch (e) {
+    console.error('backfill membership:', e);
+    showToast('Could not save the membership. Make sure you\'re signed in as the admin.', 'error');
+    btn.disabled = false;
+  }
+}
+
+let linkAccountResults = [];
+
+function openLinkAccount() {
+  if (staffBlocked()) return;
+  const f = selectedFamily;
+  if (!f?.phoneKey) return;
+  openModal(`
+    <h2><i class="fas fa-link" style="color:var(--teal)"></i> Link to a Family Account</h2>
+    <p class="modal-hint">This shows everything filed under <strong>${escapeHtml(f.phone)}</strong> on that family's My Account page. Only link once you've checked it's really them — for example, they're at the front desk showing their account card.</p>
+    <input type="search" id="linkAccountSearch" class="link-account-search" placeholder="Search by name, email, or Account ID" oninput="renderLinkAccountList()" autocomplete="off">
+    <div id="linkAccountList" class="link-account-list"></div>
+    <p class="modal-hint" style="margin-top:0.75rem">Don't see them? Ask the family to sign in once on the <strong>My Account</strong> page, then reopen this window.</p>`);
+  renderLinkAccountList();
+  document.getElementById('linkAccountSearch').focus();
+}
+
+function renderLinkAccountList() {
+  const f = selectedFamily;
+  const list = document.getElementById('linkAccountList');
+  if (!f || !list) return;
+  const q = (document.getElementById('linkAccountSearch')?.value || '').trim().toLowerCase();
+  linkAccountResults = familyAccounts
+    .filter(a => !q || (a.name || '').toLowerCase().includes(q) || (a.email || '').toLowerCase().includes(q) || accountIdFor(a.uid).toLowerCase().includes(q))
+    .sort((a, b) => Number(f.emails.has((b.email || '').toLowerCase())) - Number(f.emails.has((a.email || '').toLowerCase())) || (a.name || '').localeCompare(b.name || ''));
+  if (!familyAccounts.length) {
+    list.innerHTML = '<p class="muted">No families have signed in to My Account yet.</p>';
+    return;
+  }
+  list.innerHTML = linkAccountResults.length ? linkAccountResults.slice(0, 50).map((a, i) => {
+    const linked = (a.linkedPhones || []).includes(f.phoneKey);
+    return `
+      <div class="link-account-row">
+        <div>
+          <strong>${escapeHtml(a.name || '(no name)')}</strong>
+          <div class="muted">${escapeHtml(a.email || '')} · Account ID ${accountIdFor(a.uid)}</div>
+        </div>
+        ${linked
+          ? `<span class="status-pill status-active">Linked ✓</span><button class="link-btn" onclick="unlinkFamilyAccount(${i})">Unlink</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="linkFamilyAccount(${i})">Link</button>`}
+      </div>`;
+  }).join('') : '<p class="muted">No accounts match that search.</p>';
+}
+
+async function linkFamilyAccount(i) {
+  if (staffBlocked()) return;
+  const a = linkAccountResults[i];
+  const f = selectedFamily;
+  if (!a || !f?.phoneKey) return;
+  try {
+    await DataStore.linkPhoneToMember(a.uid, f.phoneKey, f.phone);
+    a.linkedPhones = [...(a.linkedPhones || []), f.phoneKey];
+    renderLinkAccountList();
+    renderFamilyDetail();
+    showToast(`${f.phone} linked to ${a.name || a.email}`, 'success');
+  } catch (e) {
+    console.warn('link account:', e);
+    showToast('Could not link. Make sure you\'re signed in as the admin.', 'error');
+  }
+}
+
+async function unlinkFamilyAccount(i) {
+  if (staffBlocked()) return;
+  const a = linkAccountResults[i];
+  const f = selectedFamily;
+  if (!a || !f?.phoneKey) return;
+  if (!confirm(`Unlink ${f.phone} from ${a.name || a.email}?`)) return;
+  try {
+    await DataStore.unlinkPhoneFromMember(a.uid, f.phoneKey);
+    a.linkedPhones = (a.linkedPhones || []).filter(p => p !== f.phoneKey);
+    renderLinkAccountList();
+    renderFamilyDetail();
+    showToast('Unlinked', 'info');
+  } catch (e) {
+    console.warn('unlink account:', e);
+    showToast('Could not unlink. Make sure you\'re signed in as the admin.', 'error');
+  }
 }
 
 // ==========================================

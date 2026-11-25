@@ -1,38 +1,10 @@
 // ==========================================
 // FIREBASE CONFIGURATION - Peachy Pals Playland
 // ==========================================
-// BACKEND: Firebase Realtime Database
+// BACKEND: Firebase Realtime Database + Auth (admin sign-in) + Storage
 //
-// RTDB RULES (paste in Firebase Console > Realtime Database > Rules):
-// -------------------------------------------------------------------
-// {
-//   "rules": {
-//     "bookings": { ".read": true, ".write": true },
-//     "packages": { ".read": true, ".write": true },
-//     "memberships": { ".read": true, ".write": true },
-//     "services": { ".read": true, ".write": true },
-//     "blockedDates": { ".read": true, ".write": true },
-//     "waivers": { ".read": true, ".write": true },
-//     "notifications": { ".read": true, ".write": true },
-//     "posts": { ".read": true, ".write": true },
-//     "events": { ".read": true, ".write": true },
-//     "promoCodes": { ".read": true, ".write": true },
-//     "presence": { ".read": true, ".write": true, ".indexOn": ["startedAt"] },
-//     "stats": { ".read": true, ".write": true }
-//   }
-// }
-//
-// STORAGE RULES (paste in Firebase Console > Storage > Rules):
-// -------------------------------------------------------------------
-// rules_version = '2';
-// service firebase.storage {
-//   match /b/{bucket}/o {
-//     match /{allPaths=**} {
-//       allow read: if true;
-//       allow write: if true;
-//     }
-//   }
-// }
+// Security rules live in database.rules.json and storage.rules and are
+// deployed with:  firebase deploy --only database,storage
 // ==========================================
 
 const firebaseConfig = {
@@ -49,14 +21,16 @@ const firebaseConfig = {
 // Initialize Firebase
 let db;
 let storage;
+let auth = null;
 let isFirebaseConfigured = false;
 
 try {
   firebase.initializeApp(firebaseConfig);
   db = firebase.database();
   storage = firebase.storage();
+  auth = firebase.auth();
   isFirebaseConfigured = true;
-  console.log("✅ Firebase connected (RTDB + Storage)");
+  console.log("✅ Firebase connected (RTDB + Auth + Storage)");
 } catch (e) {
   console.error("❌ Firebase initialization failed:", e);
   console.warn("⚠️ Falling back to localStorage.");
@@ -691,24 +665,13 @@ const DataStore = {
   },
 
   // --- PROMO CODES ---
-  // Uses Firebase when reachable; on PERMISSION_DENIED (rules not yet updated)
-  // transparently falls back to localStorage so admin can keep using the feature.
   _promoLsList() { return JSON.parse(localStorage.getItem('pp_promoCodes') || '[]'); },
   _promoLsSave(arr) { localStorage.setItem('pp_promoCodes', JSON.stringify(arr)); },
-  _isPermDenied(e) { return e && (e.code === 'PERMISSION_DENIED' || (e.message || '').toLowerCase().includes('permission')); },
 
   async getPromoCodes() {
     if (isFirebaseConfigured) {
-      try {
-        const snap = await this._ref('promoCodes').once('value');
-        return this._snapToArray(snap).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-      } catch (e) {
-        if (this._isPermDenied(e)) {
-          console.warn('promoCodes: Firebase rules not updated — using localStorage. Paste the updated rules from firebase-config.js.');
-          return this._promoLsList();
-        }
-        throw e;
-      }
+      const snap = await this._ref('promoCodes').once('value');
+      return this._snapToArray(snap).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     }
     return this._promoLsList();
   },
@@ -717,24 +680,19 @@ const DataStore = {
     if (promo.code) promo.code = String(promo.code).toUpperCase().replace(/[^A-Z0-9_-]/g, '');
     promo.updatedAt = new Date().toISOString();
     if (isFirebaseConfigured) {
-      try {
-        if (promo.id) {
-          const id = promo.id;
-          const data = { ...promo };
-          delete data.id;
-          await this._ref('promoCodes/' + id).set(data);
-          return id;
-        }
-        promo.createdAt = new Date().toISOString();
+      if (promo.id) {
+        const id = promo.id;
         const data = { ...promo };
         delete data.id;
-        const ref = this._ref('promoCodes').push();
-        await ref.set(data);
-        return ref.key;
-      } catch (e) {
-        if (!this._isPermDenied(e)) throw e;
-        console.warn('promoCodes: rule denied — writing to localStorage');
+        await this._ref('promoCodes/' + id).set(data);
+        return id;
       }
+      promo.createdAt = new Date().toISOString();
+      const data = { ...promo };
+      delete data.id;
+      const ref = this._ref('promoCodes').push();
+      await ref.set(data);
+      return ref.key;
     }
     const codes = this._promoLsList();
     if (promo.id) {
@@ -752,8 +710,8 @@ const DataStore = {
 
   async deletePromoCode(id) {
     if (isFirebaseConfigured) {
-      try { await this._ref('promoCodes/' + id).remove(); return; }
-      catch (e) { if (!this._isPermDenied(e)) throw e; }
+      await this._ref('promoCodes/' + id).remove();
+      return;
     }
     let codes = this._promoLsList();
     codes = codes.filter(c => c.id !== id);
@@ -770,22 +728,73 @@ const DataStore = {
   async incrementPromoUsage(id) {
     if (!id) return;
     if (isFirebaseConfigured) {
-      try {
-        const ref = this._ref('promoCodes/' + id + '/usageCount');
-        await ref.transaction(cur => (cur || 0) + 1);
-        return;
-      } catch (e) { if (!this._isPermDenied(e)) throw e; }
+      await this._ref('promoCodes/' + id + '/usageCount').transaction(cur => (cur || 0) + 1);
+      return;
     }
     const codes = this._promoLsList();
     const c = codes.find(x => x.id === id);
     if (c) { c.usageCount = (c.usageCount || 0) + 1; this._promoLsSave(codes); }
   },
 
+  // --- MEMBER ACCOUNTS (Google sign-in) ---
+  // members/{uid}/profile is written by the family; members/{uid}/linkedPhones only by admin.
+  async ensureMemberProfile(user) {
+    if (!isFirebaseConfigured || !user) return;
+    const ref = this._ref('members/' + user.uid + '/profile');
+    const snap = await ref.once('value');
+    const now = new Date().toISOString();
+    const base = { name: user.displayName || '', email: user.email || '', photoURL: user.photoURL || '', lastSignInAt: now };
+    if (snap.exists()) await ref.update(base);
+    else await ref.set({ ...base, createdAt: now });
+  },
+
+  async getMemberLinkedPhones(uid) {
+    if (!isFirebaseConfigured || !uid) return [];
+    const snap = await this._ref('members/' + uid + '/linkedPhones').once('value');
+    return Object.keys(snap.val() || {});
+  },
+
+  async getAllMemberAccounts() {
+    if (!isFirebaseConfigured) return [];
+    const snap = await this._ref('members').once('value');
+    const accounts = [];
+    snap.forEach(child => {
+      const v = child.val() || {};
+      accounts.push({ uid: child.key, ...(v.profile || {}), linkedPhones: Object.keys(v.linkedPhones || {}) });
+    });
+    return accounts;
+  },
+
+  async linkPhoneToMember(uid, phoneKey, phoneDisplay) {
+    await this._ref('members/' + uid + '/linkedPhones/' + phoneKey).set({ phone: phoneDisplay || phoneKey, linkedAt: new Date().toISOString() });
+  },
+
+  async unlinkPhoneFromMember(uid, phoneKey) {
+    await this._ref('members/' + uid + '/linkedPhones/' + phoneKey).remove();
+  },
+
+  // --- SETTINGS ---
+  async getSetting(key) {
+    if (isFirebaseConfigured) {
+      const snap = await this._ref('settings/' + key).once('value');
+      return snap.val();
+    }
+    return JSON.parse(localStorage.getItem('pp_setting_' + key) || 'null');
+  },
+
+  async setSetting(key, value) {
+    if (isFirebaseConfigured) {
+      await this._ref('settings/' + key).set(value);
+      return;
+    }
+    localStorage.setItem('pp_setting_' + key, JSON.stringify(value));
+  },
+
   subscribePromoCodes(onChange) {
     if (!isFirebaseConfigured) { onChange(this._promoLsList()); return; }
     this._ref('promoCodes').on('value',
       snap => onChange(this._snapToArray(snap)),
-      () => onChange(this._promoLsList())
+      err => console.warn('promoCodes subscription:', err)
     );
   },
 
