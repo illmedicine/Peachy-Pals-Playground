@@ -2740,6 +2740,12 @@ body.promo-banner-on #toast-container { top: calc(var(--nav-height) + var(--prom
 .fr-badge.waiver { background: rgba(38,166,154,0.15); color: var(--teal-dark); }
 .fr-badge.inperson { background: var(--pink-light); color: #ad1457; }
 .family-result-empty { padding: 1rem; color: var(--gray); text-align: center; }
+.family-result.family-result-add {
+  display: flex; align-items: center; gap: 0.5rem; grid-template-columns: none;
+  color: var(--peach-dark); font-weight: 800; background: var(--peach-lighter); border-bottom: none;
+}
+.family-result.family-result-add:hover { background: #FFE0B2; }
+.backfill-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .family-card { margin-top: 1rem; border: 2px solid var(--bamboo-light); border-radius: 16px; padding: 1rem 1.1rem; background: linear-gradient(135deg, #fff 0%, #F9FBF4 100%); }
 .family-card-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }

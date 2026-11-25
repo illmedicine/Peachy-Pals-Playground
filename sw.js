@@ -1,10 +1,10 @@
-const CACHE_NAME = 'peachy-pals-v10';
+const CACHE_NAME = 'peachy-pals-v11';
 const ASSETS = [
   './',
   './index.html',
-  './css/style.css?v=20261125b',
-  './js/app.js?v=20261125b',
-  './js/firebase-config.js?v=20261125b',
+  './css/style.css?v=20261125c',
+  './js/app.js?v=20261125c',
+  './js/firebase-config.js?v=20261125c',
   './images/logo.png'
 ];
 

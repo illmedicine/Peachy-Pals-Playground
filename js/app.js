@@ -4893,17 +4893,25 @@ function familyBadges(f) {
   return `${m === 'active' ? '<span class="fr-badge member">Member</span>' : m === 'pending' ? '<span class="fr-badge pending">Pending</span>' : ''}${f.waiverState.key === 'valid' ? '<span class="fr-badge waiver">Waiver</span>' : ''}`;
 }
 
+let familyLastQuery = '';
+
 function renderFamilyResults() {
   const input = document.getElementById('familySearch');
   const box = document.getElementById('familyResults');
   if (!input || !box) return;
   const query = input.value.trim();
+  familyLastQuery = query;
   familyResults = familyIndex.filter(f => familyMatches(f, query));
   familyActiveIdx = -1;
   const shown = familyResults.slice(0, 200);
   const header = query
     ? `${familyResults.length} match${familyResults.length !== 1 ? 'es' : ''}`
     : `All families on file (${familyIndex.length}) — keep typing to narrow it down`;
+  // Families who joined in person may have no waiver or booking on file yet
+  const addNew = query && !isStaff() && familyBackfillEnabled ? `
+        <button type="button" class="family-result family-result-add" onmousedown="event.preventDefault()" onclick="openNewFamilyBackfill(familyLastQuery)">
+          <i class="fas fa-user-plus"></i> ${familyResults.length ? 'Not listed?' : 'Not on file yet?'} Add “${escapeHtml(query)}” as a new in-person member
+        </button>` : '';
   box.innerHTML = `<div class="family-results-head">${escapeHtml(header)}</div>` + (shown.length
     ? shown.map((f, i) => `
         <button type="button" role="option" class="family-result" data-idx="${i}" onmousedown="event.preventDefault()" onclick="selectFamily(${i})">
@@ -4911,7 +4919,7 @@ function renderFamilyResults() {
           <span class="fr-name">${escapeHtml(f.displayName)}</span>
           <span class="fr-badges">${familyBadges(f)}</span>
         </button>`).join('')
-    : `<div class="family-result-empty">${familyIndex.length ? 'No family matches that search.' : 'Loading families…'}</div>`);
+    : `<div class="family-result-empty">${familyIndex.length ? 'No family matches that search.' : 'Loading families…'}</div>`) + addNew;
   box.hidden = false;
   if (!input._blurBound) {
     input._blurBound = true;
@@ -4921,7 +4929,7 @@ function renderFamilyResults() {
 
 function familySearchKey(e) {
   const box = document.getElementById('familyResults');
-  const items = box ? [...box.querySelectorAll('.family-result')] : [];
+  const items = box ? [...box.querySelectorAll('.family-result:not(.family-result-add)')] : [];
   if (e.key === 'Escape') { box.hidden = true; return; }
   if (!items.length) return;
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -5025,7 +5033,10 @@ function renderBackfillPanel() {
         <h3>🐼 Adding in-person members <span class="pill-temp">Temporary</span></h3>
         <p>For families who joined at the front desk before online sign-up. Find the family above, then click <strong>Add in-person membership</strong>. Once everyone's entered, switch this off — new members join online from now on.</p>
       </div>
-      <button class="btn btn-outline btn-sm" onclick="setBackfillEnabled(false)"><i class="fas fa-check"></i> Done adding in-person members</button>
+      <div class="backfill-actions">
+        <button class="btn btn-primary btn-sm" onclick="openNewFamilyBackfill('')"><i class="fas fa-user-plus"></i> Add a family who isn't on file</button>
+        <button class="btn btn-outline btn-sm" onclick="setBackfillEnabled(false)"><i class="fas fa-check"></i> Done adding in-person members</button>
+      </div>
     </div>` : `
     <p class="backfill-off">In-person member backfill is switched off. <button class="link-btn" onclick="setBackfillEnabled(true)">Turn it back on</button></p>`;
 }
@@ -5048,9 +5059,28 @@ async function setBackfillEnabled(enabled) {
 let backfillKids = [];
 let backfillRateTouched = false;
 
-function openBackfillMembership() {
+// A family with nothing on file yet, prefilled from whatever was typed in the search box
+function openNewFamilyBackfill(query) {
   if (staffBlocked()) return;
-  const f = selectedFamily;
+  const q = String(query || '').trim();
+  const f = { key: 'new', phoneKey: '', phone: '', names: new Map(), emails: new Set(), children: new Map(), memberships: [], membershipState: { key: 'none' } };
+  if (q.includes('@')) {
+    f.emails.add(q.toLowerCase());
+  } else if (phoneKey(q)) {
+    f.phoneKey = phoneKey(q);
+    f.phone = formatPhoneKey(f.phoneKey);
+  } else if (q) {
+    const name = q.replace(/\s+/g, ' ').replace(/\b\p{L}/gu, c => c.toUpperCase());
+    f.names.set(name.toLowerCase(), name);
+  }
+  const results = document.getElementById('familyResults');
+  if (results) results.hidden = true;
+  openBackfillMembership(f);
+}
+
+function openBackfillMembership(family = selectedFamily) {
+  if (staffBlocked()) return;
+  const f = family;
   if (!f) return;
   const nameParts = f.names.size ? [...f.names.values()][0].split(' ') : [];
   const today = formatDate(new Date());
@@ -5072,8 +5102,8 @@ function openBackfillMembership() {
         <div class="form-group"><label>Parent Last Name *</label><input type="text" id="bfLast" value="${escapeHtml(nameParts.slice(1).join(' '))}"></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label>Phone *</label><input type="tel" id="bfPhone" value="${escapeHtml(f.phone)}"></div>
-        <div class="form-group"><label>Email</label><input type="email" id="bfEmail" value="${escapeHtml([...f.emails][0] || '')}"></div>
+        <div class="form-group"><label>Phone *</label><input type="tel" id="bfPhone" value="${escapeHtml(f.phone)}" placeholder="(770) 555-0100"></div>
+        <div class="form-group"><label>Email</label><input type="email" id="bfEmail" value="${escapeHtml([...f.emails][0] || '')}" placeholder="optional"></div>
       </div>
       <div class="form-group">
         <label>Children on this membership *</label>
@@ -5187,6 +5217,10 @@ async function saveBackfillMembership() {
     });
     closeModal();
     showToast(`Membership added for ${firstName} ${lastName} (${result.membershipCode})`, 'success');
+    // Show the family's card (new families appear in Find a Family once saved)
+    selectedFamily = { key: phoneKey(phone) };
+    const search = document.getElementById('familySearch');
+    if (search) search.value = formatPhoneKey(phoneKey(phone));
     loadAdminMembers();
   } catch (e) {
     console.error('backfill membership:', e);
