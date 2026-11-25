@@ -1110,6 +1110,7 @@ function renderBookingCard(b, isAdmin) {
           ${b.status === 'pending' ? `<button class="btn btn-success btn-sm" onclick="confirmBookingAdmin('${b.id}')"><i class="fas fa-check"></i> Confirm</button>` : ''}
           ${!b.depositPaid ? `<button class="btn btn-primary btn-sm" onclick="markDepositPaid('${b.id}')"><i class="fas fa-dollar-sign"></i> Mark Paid</button>` : ''}
           <button class="btn btn-outline btn-sm" onclick="showBookingHistory('${b.id}')"><i class="fas fa-history"></i> History</button>
+          <button class="btn btn-outline btn-sm" onclick="startSessionFromBooking('${b.id}')"><i class="fas fa-stopwatch"></i> Start Timer</button>
           <button class="btn btn-danger btn-sm" onclick="deleteBookingAdmin('${b.id}')"><i class="fas fa-trash"></i> Delete</button>
         ` : ''}
       </div>`}
@@ -1588,6 +1589,7 @@ function adminSwitchTab(tabId) {
   if (tabId === 'adminBlog') loadAdminBlog();
   if (tabId === 'adminEvents') loadAdminEvents();
   if (tabId === 'adminMembers') loadAdminMembers();
+  if (tabId === 'adminSessions') loadAdminSessions();
   if (tabId === 'adminPosSales') loadAdminPosSales();
   if (tabId === 'adminPromos') loadAdminPromos();
   if (tabId === 'adminBirthdays') initBirthdayMarketing();
@@ -6172,6 +6174,210 @@ function dismissInstallBanner() {
 
 // ==========================================
 // HERO IMAGE SLIDER
+// ==========================================
+// ADMIN: ACTIVE PLAY SESSIONS
+// ==========================================
+const WORKER = 'https://peachypals.demarkuswilsone.workers.dev';
+let _sessionTimerHandle = null;
+let _allSessions = [];
+
+function openSessionStarter() {
+  document.getElementById('sessionStarterForm').style.display = 'block';
+  document.getElementById('sessName').focus();
+}
+function closeSessionStarter() {
+  document.getElementById('sessionStarterForm').style.display = 'none';
+  ['sessName','sessEmail','sessCode'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+}
+
+async function submitStartSession() {
+  const name = document.getElementById('sessName')?.value.trim();
+  const email = document.getElementById('sessEmail')?.value.trim();
+  const pkgSel = document.getElementById('sessPkg');
+  const mins = parseInt(pkgSel?.value || '120');
+  const code = document.getElementById('sessCode')?.value.trim();
+
+  if (!name) { showToast('Please enter the guest name.', 'error'); return; }
+
+  const pkgLabel = pkgSel?.options[pkgSel.selectedIndex]?.text || `${mins}-Minute Play Pass`;
+
+  try {
+    const resp = await fetch(`${WORKER}/play-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: name,
+        customerEmail: email || '',
+        packageName: pkgLabel,
+        durationMinutes: mins,
+        confirmationCode: code || null
+      })
+    });
+    const result = await resp.json();
+    if (!resp.ok || result.error) throw new Error(result.error || 'Failed');
+    showToast(`Timer started for ${name} — ${mins} min`, 'success');
+    closeSessionStarter();
+    loadAdminSessions();
+  } catch (err) {
+    showToast('Could not start session: ' + err.message, 'error');
+  }
+}
+
+async function startSessionFromBooking(bookingId) {
+  const booking = allBookings.find(b => b.id === bookingId);
+  if (!booking) return;
+  try {
+    const resp = await fetch(`${WORKER}/play-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: `${booking.firstName || ''} ${booking.lastName || ''}`.trim(),
+        customerEmail: booking.email || '',
+        customerPhone: booking.phone || '',
+        packageName: booking.packageName || '2-Hour Play Pass',
+        durationMinutes: 120,
+        bookingId,
+        confirmationCode: booking.confirmationCode || null
+      })
+    });
+    const result = await resp.json();
+    if (!resp.ok || result.error) throw new Error(result.error || 'Failed');
+    showToast(`Timer started for ${booking.firstName}`, 'success');
+    loadAdminSessions();
+    adminSwitchTab('adminSessions');
+  } catch (err) {
+    showToast('Could not start session: ' + err.message, 'error');
+  }
+}
+
+async function extendSession(sessionId, addMinutes) {
+  try {
+    const resp = await fetch(`${WORKER}/play-session/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'extend', addMinutes })
+    });
+    const result = await resp.json();
+    if (!resp.ok || result.error) throw new Error(result.error || 'Failed');
+    showToast(`Session extended by ${addMinutes} min`, 'success');
+    loadAdminSessions();
+  } catch (err) {
+    showToast('Could not extend: ' + err.message, 'error');
+  }
+}
+
+async function stopSession(sessionId, name) {
+  if (!confirm(`End ${name}'s session now?`)) return;
+  try {
+    await fetch(`${WORKER}/play-session/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop' })
+    });
+    showToast('Session ended.', 'success');
+    loadAdminSessions();
+  } catch (err) {
+    showToast('Could not stop session: ' + err.message, 'error');
+  }
+}
+
+async function loadAdminSessions() {
+  const list = document.getElementById('activeSessionsList');
+  if (!list) return;
+
+  try {
+    const resp = await fetch(`${WORKER}/play-sessions`);
+    const data = await resp.json();
+    _allSessions = data.sessions || [];
+    renderAdminSessions();
+
+    // Refresh timers every 30s while tab is open
+    clearInterval(_sessionTimerHandle);
+    _sessionTimerHandle = setInterval(renderAdminSessions, 30000);
+  } catch (err) {
+    list.innerHTML = `<p style="color:var(--error)">Could not load sessions: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderAdminSessions() {
+  const list = document.getElementById('activeSessionsList');
+  if (!list) return;
+
+  const now = Date.now();
+  const active = _allSessions.filter(s => s.status === 'active');
+  const recent = _allSessions.filter(s => s.status !== 'active').slice(0, 10);
+
+  if (!active.length && !recent.length) {
+    list.innerHTML = '<p style="color:var(--gray)">No active or recent sessions.</p>';
+    return;
+  }
+
+  let html = '';
+
+  if (active.length) {
+    html += `<h3 style="margin-bottom:.75rem">Active (${active.length})</h3>`;
+    html += active.map(s => {
+      const endMs = new Date(s.endTime).getTime();
+      const msLeft = endMs - now;
+      const minsLeft = Math.max(0, Math.ceil(msLeft / 60000));
+      const isExpiring = minsLeft <= 15;
+      const isOverdue = msLeft < 0;
+      const pct = Math.max(0, Math.min(100, (msLeft / (s.durationMinutes * 60000)) * 100));
+      const timeLabel = isOverdue ? 'Time up!' : (minsLeft === 1 ? '1 min left' : `${minsLeft} min left`);
+      return `
+        <div class="session-card ${isExpiring ? 'session-expiring' : ''} ${isOverdue ? 'session-overdue' : ''}">
+          <div class="session-card-header">
+            <div>
+              <strong>${escapeHtml(s.customerName)}</strong>
+              <span class="session-pkg">${escapeHtml(s.packageName || '')}</span>
+              ${s.confirmationCode ? `<span class="session-code">${escapeHtml(s.confirmationCode)}</span>` : ''}
+            </div>
+            <span class="session-time ${isExpiring ? 'session-time-warn' : ''}">${timeLabel}</span>
+          </div>
+          <div class="session-progress-bar">
+            <div class="session-progress-fill ${isExpiring ? 'session-progress-warn' : ''}" style="width:${pct.toFixed(1)}%"></div>
+          </div>
+          <div class="session-card-footer">
+            <span style="font-size:.8rem;color:var(--gray)">
+              Started ${new Date(s.startTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+              · Ends ${new Date(s.endTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+              ${s.customerEmail ? `· ${escapeHtml(s.customerEmail)}` : ''}
+            </span>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="extendSession('${s.id}', 120)">+2 hrs</button>
+              <button class="btn btn-outline btn-sm" onclick="extendSession('${s.id}', 240)">+Unlimited</button>
+              <button class="btn btn-sm" style="background:var(--error,#c62828);color:#fff" onclick="stopSession('${s.id}','${escapeHtml(s.customerName)}')">End</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  if (recent.length) {
+    html += `<h3 style="margin:1.25rem 0 .75rem">Recent</h3>`;
+    html += recent.map(s => {
+      const statusLabel = { stopped: 'Ended early', expired: 'Expired', extended: 'Extended' }[s.status] || s.status;
+      return `
+        <div class="session-card session-past">
+          <div class="session-card-header">
+            <div>
+              <strong>${escapeHtml(s.customerName)}</strong>
+              <span class="session-pkg">${escapeHtml(s.packageName || '')}</span>
+            </div>
+            <span class="session-status-pill">${statusLabel}</span>
+          </div>
+          <div style="font-size:.8rem;color:var(--gray);margin-top:.25rem">
+            ${new Date(s.startTime).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+            ${new Date(s.startTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+            – ${s.durationMinutes} min
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  list.innerHTML = html;
+}
+
 // ==========================================
 // ADMIN: POS SALES (Square in-person reconciliation)
 // ==========================================

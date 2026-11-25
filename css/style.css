@@ -2913,3 +2913,38 @@ body.promo-banner-on #toast-container { top: calc(var(--nav-height) + var(--prom
 .pos-rec-total { font-weight: 700; border-top: 1px solid var(--border-color); margin-top: .3rem; padding-top: .3rem; }
 .pos-rec-owed  { color: #e65100; font-weight: 600; }
 .pos-rec-clear { color: #2e7d32; font-weight: 600; }
+
+/* ==========================================
+   ADMIN: ACTIVE PLAY SESSIONS
+   ========================================== */
+.session-starter-form {
+  background: var(--bg-alt, #fafafa);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.active-sessions-list { display: flex; flex-direction: column; gap: .85rem; }
+.session-card {
+  border: 1.5px solid var(--border-color);
+  border-left: 4px solid var(--teal, #26a69a);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  background: var(--bg-card);
+}
+.session-card.session-expiring { border-left-color: var(--warning, #f59e0b); background: #fffbeb; }
+.session-card.session-overdue  { border-left-color: var(--error, #c62828); background: #fff5f5; }
+.session-card.session-past     { border-left-color: var(--gray, #9e9e9e); opacity: .75; }
+
+.session-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.session-pkg  { background: var(--peach-lighter,#FFF3E0); color: var(--peach-dark); border-radius: 4px; padding: .15rem .45rem; font-size: .78rem; margin-left: .4rem; }
+.session-code { background: #e3f2fd; color: #1565c0; border-radius: 4px; padding: .15rem .45rem; font-size: .78rem; margin-left: .3rem; }
+.session-time { font-size: 1rem; font-weight: 700; color: var(--teal-dark, #00796b); white-space: nowrap; }
+.session-time.session-time-warn { color: var(--warning, #b45309); }
+
+.session-progress-bar { height: 6px; background: var(--border-color); border-radius: 3px; margin: .5rem 0; overflow: hidden; }
+.session-progress-fill { height: 100%; background: var(--teal, #26a69a); border-radius: 3px; transition: width 1s linear; }
+.session-progress-fill.session-progress-warn { background: var(--warning, #f59e0b); }
+
+.session-card-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.session-status-pill { font-size: .75rem; font-weight: 700; background: var(--bg-alt,#f5f5f5); color: var(--gray); padding: .2rem .6rem; border-radius: 20px; }
